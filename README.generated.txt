@@ -45,17 +45,18 @@ Notes
     port, or with this ICMP echo ID, can be discarded.
 
 Examples
-    The following is a simple example test using synfrag to probe TCP port
-    22 via unfragmented IPv4. Note that the dstmac parameter is set to that
-    of the router between the srcip's network and the dstip's network:
+  v4-tcp
+    The following example uses synfrag to probe TCP port 22 via unfragmented
+    IPv4. Note that the dstmac parameter is set to that of the router
+    between the srcip's network and the dstip's network:
 
      %sudo ./synfrag \
-     --srcip 10.72.122.120 
-     --dstip 10.72.107.254 \
-     --interface eth1 \
-     --dstmac 00:00:0C:07:AC:01 \
-     --dstport 22 \
-     --test v4-tcp
+      --srcip 10.72.122.120 \
+      --dstip 10.72.107.254 \
+      --interface eth1 \
+      --dstmac 00:00:0C:07:AC:01 \
+      --dstport 22 \
+      --test v4-tcp
      Starting test "v4-tcp". Opening interface "eth1".
      
  Ethernet Frame, ethertype 2048
@@ -100,17 +101,77 @@ Examples
      
  Test was successful.
 
+  v4-frag-optioned-tcp
+    In this example, synfrag will send a fragmented IPv4 TCP SYN packet to
+    the target host, with the initial fragment padded out to 68 bytes. Most
+    hosts will drop fragmented IPv4 TCP SYN packets, which is the case
+    below:
+
+     sudo ./synfrag \
+      --srcip 10.72.122.120 \
+      --dstip 10.72.107.254 \
+      --interface eth1 \
+      --dstmac 00:00:0C:07:AC:01 \
+      --dstport 22 \
+      --test v4-frag-optioned-tcp
+     Starting test "v4-frag-optioned-tcp". Opening interface "eth1".
+     
+ Ethernet Frame, ethertype 2048
+      Src MAC 00:1A:4B:C6:F5:2E
+      Dest MAC 00:00:0C:07:AC:01
+     
+ IPv4 Packet:
+      Src IP: 10.72.122.120
+      Dst IP: 10.72.107.254
+      Protocol: 6
+      Frag Offset: 0
+      Flags: 1
+      Iphl: 13
+     
+ TCP Packet:
+      Src Port: 44128
+      Dst Port: 22
+      Seq Num: 480622439
+      Ack Num: 2153185280
+      Syn: 1
+      Ack: 0
+      Rst: 0
+     
+ IPv4 Packet:
+      Src IP: 10.72.122.120
+      Dst IP: 10.72.107.254
+      Protocol: 6
+      Frag Offset: 1
+      Flags: 0
+      Iphl: 5
+     
+ Packet transmission successful, waiting for reply...
+     
+ Test failed, no response before time out (10 seconds).
+
 License
     synfrag is released under the BSD license. synfrag includes BSD licensed
     code from libnet, and links against libpcap, also licensed under the BSD
     license.
 
 Copyright
-    Copyright Yahoo! Inc, 2012
+    Copyright 2012, Yahoo! Inc. All rights reserved.
 
 Author
     John Eaglesham
 
 Changes
+  1.1 - 20120215
+    Initial release as open source, thanks Yahoo!
+
+    Converted documentation to POD, added examples.
+
+    Fixed extra free() after timeout.
+
+    Print pretty flag names.
+
+    Allow users to specify a timeout period.
+
   1.0 - 20120209
-Initial release as open source.
+    Internal release.
+

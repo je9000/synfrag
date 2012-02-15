@@ -1,12 +1,8 @@
-synfrag - Copyright Yahoo! Inc 2012
-
-Summary
-====================
+=head1 synfrag
 
 A network scanning tool for sending fragmented IPv4 and IPv6 packets.
 
-Description
-====================
+=head1 Description
 
 synfrag is a network scanning and penetration testing tool used to craft and
 send fragmented and unfragmented IPv4 and IPv6 packets. It currently supports
@@ -30,8 +26,7 @@ circumvent network protections.  However, many of these operating systems
 do not implement the same protections for all protocols, allowing some
 fragmented traffic through while blocking others.
 
-Notes
-====================
+=head1 Notes
 
 synfrag is currently under development and is missing some useful features.
 Namely, synfrag does not resolve hostnames nor discover the next-hop layer
@@ -49,18 +44,78 @@ to prevent the operating system from misinterpreting replies or to prevent
 synfrag scans, traffic sent to (or from) this port, or with this ICMP echo ID,
 can be discarded.
 
-License
-====================
+=head1 Examples
+
+The following is a simple example test using synfrag to probe TCP port 22 via
+unfragmented IPv4. Note that the dstmac parameter is set to that of the router
+between the srcip's network and the dstip's network:
+
+ %sudo ./synfrag \
+ --srcip 10.72.122.120 
+ --dstip 10.72.107.254 \
+ --interface eth1 \
+ --dstmac 00:00:0C:07:AC:01 \
+ --dstport 22 \
+ --test v4-tcp
+ Starting test "v4-tcp". Opening interface "eth1".
+ 
+ Ethernet Frame, ethertype 2048
+  Src MAC 00:1A:4B:C6:F5:2E
+  Dest MAC 00:00:0C:07:AC:01
+ 
+ IPv4 Packet:
+  Src IP: 10.72.122.120
+  Dst IP: 10.72.107.254
+  Protocol: 6
+  Frag Offset: 0
+  Flags: 0
+  Iphl: 5
+ 
+ TCP Packet:
+  Src Port: 44128
+  Dst Port: 22
+  Seq Num: 6026158
+  Ack Num: 0
+  Syn: 1
+  Ack: 0
+  Rst: 0
+ 
+ Packet transmission successful, waiting for reply...
+ 
+ IPv4 Packet:
+  Src IP: 10.72.107.254
+  Dst IP: 10.72.122.120
+  Protocol: 6
+  Frag Offset: 0
+  Flags: 2
+  Iphl: 5
+ 
+ TCP Packet:
+  Src Port: 22
+  Dst Port: 44128
+  Seq Num: 321403012
+  Ack Num: 6026159
+  Syn: 1
+  Ack: 1
+  Rst: 0
+ 
+ Test was successful.
+
+=head1 License
 
 synfrag is released under the BSD license. synfrag includes BSD licensed code
 from libnet, and links against libpcap, also licensed under the BSD license.
 
-Author
-====================
-John Eaglesham
-Yahoo! Inc
+=head1 Copyright
 
-Changes
-====================
-1.0 - 20120209
+Copyright Yahoo! Inc, 2012
+
+=head1 Author
+
+John Eaglesham
+
+=head1 Changes
+
+=head2 1.0 - 20120209
+Initial release as open source.
 

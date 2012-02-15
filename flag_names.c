@@ -1,0 +1,9 @@
+tcp_flag_names[0] = NULL;
+tcp_flag_names[1] = "CWR";
+tcp_flag_names[2] = "ECN";
+tcp_flag_names[3] = "URG";
+tcp_flag_names[4] = "ACK";
+tcp_flag_names[5] = "PSH";
+tcp_flag_names[6] = "RST";
+tcp_flag_names[7] = "SYN";
+tcp_flag_names[8] = "FIN";

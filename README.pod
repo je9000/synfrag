@@ -173,6 +173,12 @@ Copyright 2012, Yahoo! Inc.  All rights reserved.
 
 John Eaglesham
 
+=head1 To-do
+
+Add ability to use synfrag as a proxy (similar to netcat), allowing full
+connections to be tunneled through synfrag. Requires implementing more of a
+real TCP/IP stack.
+
 =head1 Changes
 
 =head2 1.1 - 20120215

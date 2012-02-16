@@ -1,4 +1,4 @@
-OBJS = synfrag.o checksums.o
+OBJS = synfrag.o checksums.o flag_names.o
 SRCS = $(OBJS,.o=.c)
 CFLAGS += -Wall
 
@@ -14,5 +14,5 @@ synfrag: $(OBJS)
 	$(CC) $(LDFLAGS) -lpcap -o synfrag $(OBJS)
 
 clean:
-	rm -rf *.o synfrag
+	rm -rf $(OBJS) synfrag
 

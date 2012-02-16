@@ -21,6 +21,8 @@
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Author: John Eaglesham
  */
 
 #define __USE_BSD
@@ -61,8 +63,9 @@
 #include <sys/wait.h>
 #include <getopt.h>
 #include "checksums.h"
+#include "flag_names.h"
 
-#define PCAP_TIMEOUT_SECONDS 10
+#define DEFAULT_TIMEOUT_SECONDS 10
 #define IP_FLAGS_OFFSET 13
 #define SOURCE_PORT 44128
 #define BIG_PACKET_SIZE 1500
@@ -73,7 +76,8 @@
  * sizes of the other (IPv4/IPv6+destination options+fragmentation+padding)
  * headers, a buffer will overflow. So don't do that. 
  */
-#define MINIMUM_FRAGMENT_SIZE 8
+#define FRAGMENT_OFFSET_TO_BYTES 8
+#define MINIMUM_FRAGMENT_SIZE FRAGMENT_OFFSET_TO_BYTES
 #define MINIMUM_PACKET_SIZE 68
 
 /* Save time typing/screen real estate. */
@@ -228,23 +232,27 @@ unsigned short fix_up_destination_options_length( unsigned short optlen )
 
 void print_ethh( struct ether_header *ethh )
 {
-    printf( "Ethernet Frame, ethertype %i\n", ntohs( ethh->ether_type ) );
+    printf( "Ethernet Frame, ethertype 0x%04X (%s)\n",
+        ntohs( ethh->ether_type ),
+        ether_protocol_to_name( ntohs( ethh->ether_type ) )
+    );
 
     printf( " Src MAC %02X:%02X:%02X:%02X:%02X:%02X\n",
-            ethh->ether_shost[0],
-            ethh->ether_shost[1],
-            ethh->ether_shost[2],
-            ethh->ether_shost[3],
-            ethh->ether_shost[4],
-            ethh->ether_shost[5] );
+        ethh->ether_shost[0],
+        ethh->ether_shost[1],
+        ethh->ether_shost[2],
+        ethh->ether_shost[3],
+        ethh->ether_shost[4],
+        ethh->ether_shost[5] );
 
     printf( " Dest MAC %02X:%02X:%02X:%02X:%02X:%02X\n",
-            ethh->ether_dhost[0],
-            ethh->ether_dhost[1],
-            ethh->ether_dhost[2],
-            ethh->ether_dhost[3],
-            ethh->ether_dhost[4],
-            ethh->ether_dhost[5] );
+        ethh->ether_dhost[0],
+        ethh->ether_dhost[1],
+        ethh->ether_dhost[2],
+        ethh->ether_dhost[3],
+        ethh->ether_dhost[4],
+        ethh->ether_dhost[5] );
+
     printf( "\n" );
 }
 
@@ -252,6 +260,7 @@ void print_iph( struct ip *iph )
 {
     char srcbuf[INET_ADDRSTRLEN];
     char dstbuf[INET_ADDRSTRLEN];
+    char *flag_names = ip_flags_to_names( ntohs( iph->ip_off ) >> IP_FLAGS_OFFSET );
 
     if ( inet_ntop( AF_INET, &iph->ip_src, (char *) &srcbuf, INET_ADDRSTRLEN ) == NULL ) err( 1, "inet_ntop failed" );
     if ( inet_ntop( AF_INET, &iph->ip_dst, (char *) &dstbuf, INET_ADDRSTRLEN ) == NULL ) err( 1, "inet_ntop failed" );
@@ -259,18 +268,23 @@ void print_iph( struct ip *iph )
     printf( "IPv4 Packet:\n\
  Src IP: %s\n\
  Dst IP: %s\n\
- Protocol: %i\n\
- Frag Offset: %i\n\
- Flags: %i\n\
- Iphl: %i\n\
+ Protocol: %i (%s)\n\
+ Frag Offset: %i (%i bytes)\n\
+ Flags: %i (%s)\n\
+ Iphl: %i (%i bytes)\n\
 \n",
         (char *) &srcbuf,
         (char *) &dstbuf,
         iph->ip_p,
+        ip_protocol_to_name( iph->ip_p ),
         ntohs( iph->ip_off ) & 0x1FFF,
+        ( ntohs( iph->ip_off ) & 0x1FFF ) * FRAGMENT_OFFSET_TO_BYTES,
         ntohs( iph->ip_off ) >> IP_FLAGS_OFFSET,
-        iph->ip_hl
+        flag_names,
+        iph->ip_hl,
+        iph->ip_hl * 4
     );
+    free( flag_names );
 }
 
 void print_ip6h( struct ip6_hdr *ip6h )
@@ -284,12 +298,13 @@ void print_ip6h( struct ip6_hdr *ip6h )
     printf( "IPv6 Packet:\n\
  Src IP: %s\n\
  Dst IP: %s\n\
- Protocol: %i\n\
+ Protocol: %i (%s)\n\
  Payload Len: %i\n\
 \n",
         (char *) &srcbuf,
         (char *) &dstbuf,
         ip6h->ip6_nxt,
+        ip_protocol_to_name( ip6h->ip6_nxt ),
         ntohs( ip6h->ip6_plen )
     );
 }
@@ -297,10 +312,12 @@ void print_ip6h( struct ip6_hdr *ip6h )
 void print_icmph( struct icmp *icmph )
 {
     printf( "ICMP Packet:\n\
- Type: %i\n\
- Code: %i\n",
+ Type: %i (%s)\n\
+ Code: %i (%s)\n",
         icmph->icmp_type,
-        icmph->icmp_code
+        icmp_type_to_name( icmph->icmp_type ),
+        icmph->icmp_code,
+        icmp_code_to_name( icmph->icmp_type, icmph->icmp_code )
     );
     if ( ( icmph->icmp_type == ICMP_ECHO || icmph->icmp_type == ICMP_ECHOREPLY ) && ( icmph->icmp_code == 0 ) ) {
         printf( " Echo id: %i\n", htons( icmph->icmp_id ) );
@@ -311,33 +328,38 @@ void print_icmph( struct icmp *icmph )
 void print_icmp6h( struct icmp6_hdr *icmp6h )
 {
     printf( "ICMPv6 Packet:\n\
- Type: %i\n\
- Code: %i\n\
+ Type: %i (%s)\n\
+ Code: %i (%s)\n\
 \n",
         icmp6h->icmp6_type,
-        icmp6h->icmp6_code
+        icmp6_type_to_name( icmp6h->icmp6_type ),
+        icmp6h->icmp6_code,
+        icmp6_code_to_name( icmp6h->icmp6_type, icmp6h->icmp6_code )
     );
+    if ( ( icmp6h->icmp6_type == ICMP6_ECHO_REQUEST || icmp6h->icmp6_type == ICMP6_ECHO_REPLY ) && ( icmp6h->icmp6_code == 0 ) ) {
+        printf( " Echo id: %i\n", htons( icmp6h->icmp6_id ) );
+    }
+    printf( "\n" );
 }
 
 void print_tcph( struct tcphdr *tcph )
 {
+    char *tcp_flags = tcp_flags_to_names( tcph->th_flags );
     printf( "TCP Packet:\n\
  Src Port: %u\n\
  Dst Port: %u\n\
  Seq Num: %u\n\
  Ack Num: %u\n\
- Syn: %i\n\
- Ack: %i\n\
- Rst: %i\n\
+ Flags: %i (%s)\n\
 \n",
         ntohs( tcph->th_sport ),
         ntohs( tcph->th_dport ),
         ntohl( tcph->th_seq ),
         ntohl( tcph->th_ack ),
-        tcph->th_flags & TH_SYN ? 1 : 0,
-        tcph->th_flags & TH_ACK ? 1 : 0,
-        tcph->th_flags & TH_RST ? 1 : 0
+        tcph->th_flags,
+        tcp_flags
     );
+    free( tcp_flags );
 }
 
 void build_ethernet( struct ether_header *ethh, char *interface, char *remote_mac, short int ethertype )
@@ -609,7 +631,7 @@ char *print_a_packet( int len, char *packet_data, unsigned short wanted_type )
     return NULL;
 }
 
-int receive_a_packet( char *srcip, char *dstip, unsigned short srcport, unsigned short dstport, enum TEST_TYPE test_type, char **packet_buf )
+int receive_a_packet( char *srcip, char *dstip, unsigned short srcport, unsigned short dstport, enum TEST_TYPE test_type, char **packet_buf, long receive_timeout )
 {
     struct pcap_pkthdr *received_packet_pcap;
     struct bpf_program pcap_filter;
@@ -664,7 +686,7 @@ int receive_a_packet( char *srcip, char *dstip, unsigned short srcport, unsigned
     FD_ZERO( &select_me );
     FD_SET( fd, &select_me );
 
-    ts.tv_sec = PCAP_TIMEOUT_SECONDS;
+    ts.tv_sec = receive_timeout;
     ts.tv_usec = 0;
 
     /*
@@ -1008,7 +1030,7 @@ void do_ipv6_optioned_tcp_frag( char *interface, char *srcip, char *dstip, char 
 }
 
 /* Process functions. */
-void fork_pcap_listener( char *dstip, char *srcip, unsigned short dstport, unsigned short srcport, enum TEST_TYPE test_type )
+void fork_pcap_listener( char *dstip, char *srcip, unsigned short dstport, unsigned short srcport, enum TEST_TYPE test_type, long receive_timeout )
 {
     char *packet_buf;
     char buf;
@@ -1034,7 +1056,7 @@ void fork_pcap_listener( char *dstip, char *srcip, unsigned short dstport, unsig
 
     pcap_setdirection( pcap, PCAP_D_IN );
 
-    r = receive_a_packet( dstip, srcip, dstport, SOURCE_PORT, test_type, &packet_buf );
+    r = receive_a_packet( dstip, srcip, dstport, SOURCE_PORT, test_type, &packet_buf, receive_timeout );
     if ( r ) {
         write( pfd[1], &r, sizeof( int ) );
         write( pfd[1], packet_buf, r );
@@ -1062,11 +1084,19 @@ int harvest_pcap_listener( char **packet_buf ) {
     return packet_buf_size;
 }
 
-void exit_with_usage(void)
+void print_test_types( void )
 {
     char *test;
     int x = 0;
 
+    fprintf( stderr, "Available test types:\n\n" );
+    while ( ( test = test_names[x++] ) ) {
+        fprintf( stderr, "%s\n", test );
+    }
+}
+
+void exit_with_usage( void )
+{
     fprintf( stderr, "synfrag usage:\n" );
     fprintf( stderr, "--help | -h  This message.\n" );
     fprintf( stderr, "--srcip      Source IP address (this hosts)\n" );
@@ -1076,11 +1106,9 @@ void exit_with_usage(void)
     fprintf( stderr, "--dstport    Destination port for TCP tests\n" );
     fprintf( stderr, "--dstmac     Destination MAC address (default gw or target host if on subnet)\n" );
     fprintf( stderr, "--interface  Packet source interface\n" );
-    fprintf( stderr, "--test       Type of test to run.\n\n" );
-    fprintf( stderr, "Available test types:\n\n" );
-    while ( ( test = test_names[x++] ) ) {
-        fprintf( stderr, "%s\n", test );
-    }
+    fprintf( stderr, "--test       Type of test to run\n" );
+    fprintf( stderr, "--timeout    Reply timeout in seconds (defaults to 10)\n\n" );
+    print_test_types();
     fprintf( stderr, "\nAll TCP tests send syn packets, all ICMP/6 test send ping.\n" );
     fprintf( stderr, "All \"frag\" tests send fragments that are below the minimum packet size.\n" );
     fprintf( stderr, "All \"optioned\" tests send fragments that meet the minimum packet size.\n" );
@@ -1111,11 +1139,13 @@ enum TEST_TYPE parse_args(
     unsigned short *dstport,
     char **dstmac,
     char **interface,
-    char **test_name
+    char **test_name,
+    long *timeout
 ) {
     int x = 0;
     int option_index = 0;
     int c, tmpport;
+    long tmptime;
     char *possible_match;
     enum TEST_TYPE test_type = 0;
     static struct option long_options[] = {
@@ -1127,6 +1157,7 @@ enum TEST_TYPE parse_args(
         {"interface", required_argument, 0, 0},
         {"test", required_argument, 0, 0},
         {"help", no_argument, 0, 0},
+        {"timeout", required_argument, 0, 0},
         {0, 0, 0, 0}
     };
 
@@ -1164,6 +1195,11 @@ enum TEST_TYPE parse_args(
             if ( tmpport > 65535 || tmpport < 1 ) errx( 1, "Invalid value for dstport" );
             *dstport = (unsigned short) tmpport;
 
+        } else if ( strcmp( long_options[option_index].name, "timeout" ) == 0 ) {
+            tmptime = atol( optarg );
+            if ( tmptime < 1 ) errx( 1, "Invalid value for timeout" );
+            *timeout = tmptime;
+
         } else if ( strcmp( long_options[option_index].name, "test" ) == 0 ) {
             while ( ( possible_match = test_names[x] ) ) {
                 if ( strcmp( optarg, possible_match ) == 0 ) {
@@ -1182,7 +1218,11 @@ enum TEST_TYPE parse_args(
     if ( !*dstip ) errx( 1, "Missing dstip" );
     if ( !*dstmac ) errx( 1, "Missing dstmac" );
     if ( !*interface ) errx( 1, "Missing interface" );
-    if ( !test_type ) errx( 1, "Missing or invalid test type." );
+    if ( !test_type ) {
+        fprintf( stderr, "Missing or invalid test type.\n" );
+        print_test_types();
+        exit( 1 );
+    }
 
     if ( IS_TEST_TCP( test_type ) ) {
         /* Currently not used.
@@ -1206,8 +1246,9 @@ int main( int argc, char **argv )
     unsigned short srcport;
     char *packet_buf;
     char *test_name;
+    long receive_timeout = DEFAULT_TIMEOUT_SECONDS;
 
-    test_type = parse_args( argc, argv, &srcip, &dstip, &srcport, &dstport, &dstmac, &interface, &test_name );
+    test_type = parse_args( argc, argv, &srcip, &dstip, &srcport, &dstport, &dstmac, &interface, &test_name, &receive_timeout );
     srand( getpid() );
 
     printf( "Starting test \"%s\". Opening interface \"%s\".\n\n", test_name, interface );
@@ -1217,7 +1258,7 @@ int main( int argc, char **argv )
     if ( pcap_datalink( pcap ) != DLT_EN10MB )
         errx( 1, "non-ethernet interface specified." );
 
-    fork_pcap_listener( dstip, srcip, dstport, SOURCE_PORT, test_type );
+    fork_pcap_listener( dstip, srcip, dstport, SOURCE_PORT, test_type, receive_timeout );
 
     switch ( test_type ) {
         case TEST_IPV4_TCP:
@@ -1260,8 +1301,7 @@ int main( int argc, char **argv )
 
     r = harvest_pcap_listener( &packet_buf );
     if ( !r ) {
-        fprintf( stderr, "Test failed, no response before time out (%i seconds).\n", PCAP_TIMEOUT_SECONDS );
-        free( packet_buf );
+        fprintf( stderr, "Test failed, no response before time out (%li seconds).\n", receive_timeout );
         return 1;
     }
     if ( check_received_packet( r, packet_buf, test_type ) ) {

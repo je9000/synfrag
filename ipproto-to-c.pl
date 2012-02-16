@@ -53,4 +53,4 @@ while( my $l = <$fh> ) {
         print qq#    if ( protocol == $2 ) return "$1";\n#;
     }
 }
-print qq#    return "Unassigned";\n}\n#;
+print qq#    return "Unassigned";\n}\n\n#;

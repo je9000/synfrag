@@ -124,11 +124,9 @@ foreach my $type ( sort{ $a <=> $b } ( keys( %icmp_codes ) ) ) {
     print qq#    if ( type == $type ) return "$name";\n#;
 }
 
-print qq#    return "Unassigned";\n}\n#;
+print qq#    return "Unassigned";\n}\n\n#;
 
-print qq#\n#;
-
-print qq#char *icmp_code_to_name( unsigned char type, unsigned short code )\n{\n#;
+print qq#char *icmp_code_to_name( unsigned char type, unsigned char code )\n{\n#;
 
 foreach my $type ( sort{ $a <=> $b } ( keys( %icmp_codes ) ) ) {
     if ( !exists $icmp_codes{$type}->{codes} ) { next; }
@@ -140,6 +138,6 @@ foreach my $type ( sort{ $a <=> $b } ( keys( %icmp_codes ) ) ) {
     print qq#    }\n#;
 }
 
-print qq#    return "Unassigned";\n}\n#;
+print qq#    return "Unassigned";\n}\n\n#;
 
 #die Dumper \%icmp_codes;

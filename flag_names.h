@@ -25,6 +25,14 @@
  * Author: John Eaglesham
  */
 
+/* Require users to free() the returned pointer. */
 char *tcp_flags_to_names( unsigned char );
+char *ip_flags_to_names( unsigned char );
+
+/* Returned pointer is to a static buffer, don't call free() */
 char *icmp_type_to_name( unsigned char );
 char *icmp_code_to_name( unsigned char, unsigned char );
+char *icmp6_type_to_name( unsigned char );
+char *icmp6_code_to_name( unsigned char, unsigned char );
+char *ip_protocol_to_name( unsigned char );
+char *ether_protocol_to_name( unsigned short );

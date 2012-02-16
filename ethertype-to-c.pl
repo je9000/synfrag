@@ -38,19 +38,24 @@ use Data::Dumper;
 
 my $fh;
 
-open( $fh, '<', '/usr/include/net/ethernet.h' ) || die "Failed to open /usr/include/net/ethernet.h: $!";
-
 print qq#char *ether_protocol_to_name( unsigned short protocol )\n{\n#;
-while( my $l = <$fh> ) {
-    # BSD style.
-    if ( $l =~ /^\s*#define\s+(ETHERTYPE_[[:graph:]]+)\s+(0x[[:xdigit:]]+)/ ) {
-        next if ord( $2 ) > 65535;
-        print qq#    if ( protocol == $2 ) return "$1";\n#;
 
-    # Linux style.
-    } elsif ( $l =~ /^\s+(IPPROTO_[[:graph:]]+)\s+=\s+(0x[[:xdigit:]]+)/ ) {
-        next if ord( $2 ) > 65535;
-        print qq#    if ( protocol == $2 ) return "$1";\n#;
+if ( open( $fh, '<', '/usr/include/linux/if_ether.h' ) ) {
+    while( my $l = <$fh> ) {
+        if ( $l =~ /^\s*#define\s+ETH_P_([[:graph:]]+)\s+(0x[[:xdigit:]]+)/ ) {
+            next if ord( $2 ) > 65535;
+            print qq#    if ( protocol == $2 ) return "ETHERTYPE_$1";\n#;
+        }
+    }
+
+} else {
+    open( $fh, '<', '/usr/include/net/ethernet.h' ) || die "Failed to open /usr/include/linux/if_ether.h and /usr/include/net/ethernet.h: $!";
+
+    while( my $l = <$fh> ) {
+        if ( $l =~ /^\s*#define\s+(ETHERTYPE_[[:graph:]]+)\s+(0x[[:xdigit:]]+)/ ) {
+            next if ord( $2 ) > 65535;
+            print qq#    if ( protocol == $2 ) return "$1";\n#;
+        }
     }
 }
-print qq#    return "Unassigned";\n}\n#;
+print qq#    return "Unassigned";\n}\n\n#;

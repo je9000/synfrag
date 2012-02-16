@@ -46,60 +46,119 @@ can be discarded.
 
 =head1 Examples
 
-The following is a simple example test using synfrag to probe TCP port 22 via
-unfragmented IPv4. Note that the dstmac parameter is set to that of the router
-between the srcip's network and the dstip's network:
+=head2 v4-tcp
+
+The following example uses synfrag to probe TCP port 22 via unfragmented
+IPv4. Note that the dstmac parameter is set to that of the router between
+the srcip's network and the dstip's network:
 
  %sudo ./synfrag \
- --srcip 10.72.122.120 
- --dstip 10.72.107.254 \
- --interface eth1 \
- --dstmac 00:00:0C:07:AC:01 \
- --dstport 22 \
- --test v4-tcp
+  --srcip 10.72.122.120 \
+  --dstip 10.72.107.254 \
+  --interface eth1 \
+  --dstmac 00:00:0C:07:AC:01 \
+  --dstport 22 \
+  --test v4-tcp
  Starting test "v4-tcp". Opening interface "eth1".
  
- Ethernet Frame, ethertype 2048
+ Ethernet Frame, ethertype 0x0800 (ETHERTYPE_IP)
   Src MAC 00:1A:4B:C6:F5:2E
   Dest MAC 00:00:0C:07:AC:01
  
  IPv4 Packet:
   Src IP: 10.72.122.120
   Dst IP: 10.72.107.254
-  Protocol: 6
-  Frag Offset: 0
-  Flags: 0
-  Iphl: 5
+  Protocol: 6 (IPPROTO_TCP)
+  Frag Offset: 0 (0 bytes)
+  Flags: 0 (None)
+  Iphl: 5 (20 bytes)
  
  TCP Packet:
   Src Port: 44128
   Dst Port: 22
-  Seq Num: 6026158
+  Seq Num: 637685203
   Ack Num: 0
-  Syn: 1
-  Ack: 0
-  Rst: 0
+  Flags: 2 (SYN)
  
  Packet transmission successful, waiting for reply...
  
  IPv4 Packet:
   Src IP: 10.72.107.254
   Dst IP: 10.72.122.120
-  Protocol: 6
-  Frag Offset: 0
-  Flags: 2
-  Iphl: 5
+  Protocol: 6 (IPPROTO_TCP)
+  Frag Offset: 0 (0 bytes)
+  Flags: 2 (DF)
+  Iphl: 5 (20 bytes)
  
  TCP Packet:
   Src Port: 22
   Dst Port: 44128
-  Seq Num: 321403012
-  Ack Num: 6026159
-  Syn: 1
-  Ack: 1
-  Rst: 0
+  Seq Num: 392222197
+  Ack Num: 637685204
+  Flags: 18 (SYN, ACK)
  
  Test was successful.
+
+=head2 v4-frag-optioned-tcp
+
+In this example, synfrag will send a fragmented IPv4 TCP SYN packet to the
+target host, with the initial fragment padded out to 68 bytes. Most hosts will
+drop fragmented IPv4 TCP SYN packets, which is the case here. Note the target
+responds with an ICMP fragment reassembly time exceeded message, though synfrag
+will only see the reply if we increase the default timeout to 60 seconds.
+
+ sudo ./synfrag \
+  --srcip 10.72.122.120 \
+  --dstip 10.72.107.254 \
+  --interface eth1 \
+  --dstmac 00:00:0C:07:AC:01 \
+  --dstport 22 \
+  --test v4-frag-optioned-tcp \
+  --timeout 60
+ Starting test "v4-frag-optioned-tcp". Opening interface "eth1".
+ 
+ Ethernet Frame, ethertype 0x0800 (ETHERTYPE_IP)
+  Src MAC 00:1A:4B:C6:F5:2E
+  Dest MAC 00:00:0C:07:AC:01
+ 
+ IPv4 Packet:
+  Src IP: 10.72.122.120
+  Dst IP: 10.72.107.254
+  Protocol: 6 (IPPROTO_TCP)
+  Frag Offset: 0 (0 bytes)
+  Flags: 1 (MF)
+  Iphl: 13 (52 bytes)
+ 
+ TCP Packet:
+  Src Port: 44128
+  Dst Port: 22
+  Seq Num: 956140482
+  Ack Num: 2409889792
+  Flags: 2 (SYN)
+ 
+ IPv4 Packet:
+  Src IP: 10.72.122.120
+  Dst IP: 10.72.107.254
+  Protocol: 6 (IPPROTO_TCP)
+  Frag Offset: 1 (8 bytes)
+  Flags: 0 (None)
+  Iphl: 5 (20 bytes)
+ 
+ Packet transmission successful, waiting for reply...
+ 
+ IPv4 Packet:
+  Src IP: 10.72.107.254
+  Dst IP: 10.72.122.120
+  Protocol: 1 (IPPROTO_ICMP)
+  Frag Offset: 0 (0 bytes)
+  Flags: 0 (None)
+  Iphl: 5 (20 bytes)
+ 
+ ICMP Packet:
+  Type: 11 (Time Exceeded)
+  Code: 1 (Fragment Reassembly Time Exceeded)
+ 
+ Test failed.
 
 =head1 License
 
@@ -108,7 +167,7 @@ from libnet, and links against libpcap, also licensed under the BSD license.
 
 =head1 Copyright
 
-Copyright Yahoo! Inc, 2012
+Copyright 2012, Yahoo! Inc.  All rights reserved.
 
 =head1 Author
 
@@ -116,6 +175,19 @@ John Eaglesham
 
 =head1 Changes
 
+=head2 1.1 - 20120215
+
+Initial release as open source, thanks Yahoo!
+
+Converted documentation to POD, added examples.
+
+Fixed extra free() after timeout.
+
+Print pretty flag names.
+
+Allow users to specify a timeout period.
+
 =head2 1.0 - 20120209
-Initial release as open source.
+
+Internal release.
 

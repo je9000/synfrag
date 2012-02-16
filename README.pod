@@ -173,6 +173,18 @@ Copyright 2012, Yahoo! Inc.  All rights reserved.
 
 John Eaglesham
 
+=head1 Source Code
+
+Source code for stable versions of synfrag are available on Yahoo's github
+account, located at:
+
+https://github.com/yahoo/synfrag/tree/
+
+The current development branch is availble from the author's github tree,
+located at:
+
+https://github.com/jeagle/synfrag/tree/
+
 =head1 To-do
 
 Add ability to use synfrag as a proxy (similar to netcat), allowing full

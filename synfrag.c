@@ -114,7 +114,7 @@ enum TEST_TYPE {
     TEST_FRAG_IPV6_TCP = 13,
     TEST_FRAG_OPTIONED_IPV6_TCP = 15,
 
-    TEST_FRAG_IPV6_ICMP = 12,
+    TEST_FRAG_IPV6_ICMP6 = 12,
     TEST_FRAG_OPTIONED_IPV6_ICMP6 = 14,
 
     TEST_INVALID = 0
@@ -133,7 +133,7 @@ enum TEST_TYPE test_indexes[] = {
 
     TEST_IPV6_TCP,
     TEST_FRAG_IPV6_TCP,
-    TEST_FRAG_IPV6_ICMP,
+    TEST_FRAG_IPV6_ICMP6,
     TEST_FRAG_OPTIONED_IPV6_TCP,
     TEST_FRAG_OPTIONED_IPV6_ICMP6,
 
@@ -149,7 +149,7 @@ char *test_names[] = {
 
     "v6-tcp",
     "v6-frag-tcp",
-    "v6-frag-icmp",
+    "v6-frag-icmp6",
     "v6-frag-optioned-tcp",
     "v6-frag-optioned-icmp6",
 
@@ -329,8 +329,7 @@ void print_icmp6h( struct icmp6_hdr *icmp6h )
 {
     printf( "ICMPv6 Packet:\n\
  Type: %i (%s)\n\
- Code: %i (%s)\n\
-\n",
+ Code: %i (%s)\n",
         icmp6h->icmp6_type,
         icmp6_type_to_name( icmp6h->icmp6_type ),
         icmp6h->icmp6_code,
@@ -1283,7 +1282,7 @@ int main( int argc, char **argv )
         case TEST_FRAG_IPV6_TCP:
             do_ipv6_short_tcp_frag( interface, srcip, dstip, dstmac, dstport );
             break;
-        case TEST_FRAG_IPV6_ICMP:
+        case TEST_FRAG_IPV6_ICMP6:
             do_ipv6_short_icmp_frag( interface, srcip, dstip, dstmac );
             break;
         case TEST_FRAG_OPTIONED_IPV6_TCP:

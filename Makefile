@@ -1,4 +1,4 @@
-OBJS = synfrag.o checksums.o flag_names.o
+OBJS = synfrag.o checksums.o flag_names.o packets.o
 SRCS = $(OBJS,.o=.c)
 CFLAGS += -Wall
 

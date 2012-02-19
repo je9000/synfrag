@@ -2,6 +2,14 @@
 
 A network scanning tool for sending fragmented IPv4 and IPv6 packets.
 
+=head1 Warning!
+
+This version is under development. See
+
+https://github.com/yahoo/synfrag/tree/
+
+for the latest stable version!
+
 =head1 Description
 
 synfrag is a network scanning and penetration testing tool used to craft and

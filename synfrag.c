@@ -36,6 +36,8 @@
 
 #ifdef __FreeBSD__
 #include <netinet/in_systm.h>
+#include <ifaddrs.h>
+#include <net/if_dl.h>
 #endif
 
 #ifdef __linux
@@ -81,18 +83,19 @@
 #define IS_TEST_IPV6(x) ( x > 10 )
 enum TEST_TYPE {
     TEST_IPV4_TCP = 1,
-    TEST_FRAG_IPV4_TCP = 3,
-    TEST_FRAG_OPTIONED_IPV4_TCP = 5,
+    TEST_IPV4_FRAG_TCP = 3,
+    TEST_IPV4_DSTOPT_FRAG_TCP = 5,
 
-    TEST_FRAG_IPV4_ICMP = 2,
-    TEST_FRAG_OPTIONED_IPV4_ICMP = 4,
+    TEST_IPV4_FRAG_ICMP = 2,
+    TEST_IPV4_DSTOPT_FRAG_ICMP = 4,
 
     TEST_IPV6_TCP = 11,
-    TEST_FRAG_IPV6_TCP = 13,
-    TEST_FRAG_OPTIONED_IPV6_TCP = 15,
+    TEST_IPV6_FRAG_TCP = 13,
+    TEST_IPV6_DSTOPT_FRAG_TCP = 15,
+    TEST_IPV6_FRAG_DSTOPT_TCP = 17,
 
-    TEST_FRAG_IPV6_ICMP6 = 12,
-    TEST_FRAG_OPTIONED_IPV6_ICMP6 = 14,
+    TEST_IPV6_FRAG_ICMP6 = 12,
+    TEST_IPV6_DSTOPT_FRAG_ICMP6 = 14,
 
     TEST_INVALID = 0
 };
@@ -103,16 +106,17 @@ enum TEST_TYPE {
  */
 enum TEST_TYPE test_indexes[] = {
     TEST_IPV4_TCP,
-    TEST_FRAG_IPV4_TCP,
-    TEST_FRAG_IPV4_ICMP,
-    TEST_FRAG_OPTIONED_IPV4_TCP,
-    TEST_FRAG_OPTIONED_IPV4_ICMP,
+    TEST_IPV4_FRAG_TCP,
+    TEST_IPV4_FRAG_ICMP,
+    TEST_IPV4_DSTOPT_FRAG_TCP,
+    TEST_IPV4_DSTOPT_FRAG_ICMP,
 
     TEST_IPV6_TCP,
-    TEST_FRAG_IPV6_TCP,
-    TEST_FRAG_IPV6_ICMP6,
-    TEST_FRAG_OPTIONED_IPV6_TCP,
-    TEST_FRAG_OPTIONED_IPV6_ICMP6,
+    TEST_IPV6_FRAG_TCP,
+    TEST_IPV6_FRAG_ICMP6,
+    TEST_IPV6_DSTOPT_FRAG_TCP,
+    TEST_IPV6_FRAG_DSTOPT_TCP,
+    TEST_IPV6_DSTOPT_FRAG_ICMP6,
 
     0
 };
@@ -121,14 +125,14 @@ char *test_names[] = {
     "v4-tcp",
     "v4-frag-tcp",
     "v4-frag-icmp",
-    "v4-frag-optioned-tcp",
-    "v4-frag-optioned-icmp",
+    "v4-dstopt-frag-tcp",
+    "v4-dstopt-frag-icmp",
 
     "v6-tcp",
     "v6-frag-tcp",
     "v6-frag-icmp6",
-    "v6-frag-optioned-tcp",
-    "v6-frag-optioned-icmp6",
+    "v6-dstopt-frag-tcp",
+    "v6-dstopt-frag-icmp6",
 
     NULL
 };
@@ -138,7 +142,7 @@ pid_t listener_pid;
 int pfd[2];
 
 #ifdef SIOCGIFHWADDR
-char * get_interface_mac( char *interface )
+char *get_interface_mac( char *interface )
 {
     int fd;
     struct ifreq ifr;
@@ -169,9 +173,7 @@ char * get_interface_mac( char *interface )
     return dest;
 }
 #elif __FreeBSD__
-#include <ifaddrs.h>
-#include <net/if_dl.h>
-char * get_interface_mac( char *interface )
+char *get_interface_mac( char *interface )
 {
     struct ifaddrs *ifap;
     char *dest = malloc( MAC_ADDRESS_STRING_LENGTH + 1 );
@@ -419,7 +421,7 @@ int receive_a_packet( char *srcip, char *dstip, unsigned short srcport, unsigned
 {
     struct pcap_pkthdr *received_packet_pcap;
     struct bpf_program pcap_filter;
-    char *received_packet_data;
+    unsigned char *received_packet_data;
 /*
  * My back-of-the-napkin for the maximum length for the ipv6 filter string
  * below + 1 byte for the trailing NULL 
@@ -539,7 +541,7 @@ void do_ipv4_syn( char *interface, char *srcip, char *dstip, char *srcmac, char 
     free( ethh );
 }
 
-void do_ipv4_short_tcp_frag( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short dstport )
+void do_ipv4_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short dstport )
 {
     struct ip *iph;
     struct tcphdr *tcph;
@@ -568,7 +570,7 @@ void do_ipv4_short_tcp_frag( char *interface, char *srcip, char *dstip, char *sr
     free( ethh );
 }
 
-void do_ipv4_short_icmp_frag( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac )
+void do_ipv4_frag_icmp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac )
 {
     struct ip *iph;
     struct icmp *icmph;
@@ -598,7 +600,7 @@ void do_ipv4_short_icmp_frag( char *interface, char *srcip, char *dstip, char *s
     free( ethh );
 }
 
-void do_ipv4_optioned_tcp_frag( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short dstport )
+void do_ipv4_options_tcp_frag( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short dstport )
 {
     struct ip *iph;
     struct tcphdr *tcph, *tcph_optioned;
@@ -629,7 +631,7 @@ void do_ipv4_optioned_tcp_frag( char *interface, char *srcip, char *dstip, char 
     free( ethh );
 }
 
-void do_ipv4_optioned_icmp_frag( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac )
+void do_ipv4_options_icmp_frag( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac )
 {
     struct ip *iph;
     struct icmp *icmph, *icmph_optioned;
@@ -683,7 +685,7 @@ void do_ipv6_syn( char *interface, char *srcip, char *dstip, char *srcmac, char 
     free( ethh );
 }
 
-void do_ipv6_short_tcp_frag( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short dstport )
+void do_ipv6_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short dstport )
 {
     struct ip6_hdr *ip6h;
     struct tcphdr *tcph;
@@ -712,7 +714,7 @@ void do_ipv6_short_tcp_frag( char *interface, char *srcip, char *dstip, char *sr
     free( ethh );
 }
 
-void do_ipv6_short_icmp_frag( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac )
+void do_ipv6_frag_icmp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac )
 {
     struct ip6_hdr *ip6h;
     struct icmp6_hdr *icmp6h;
@@ -742,7 +744,7 @@ void do_ipv6_short_icmp_frag( char *interface, char *srcip, char *dstip, char *s
     free( ethh );
 }
 
-void do_ipv6_optioned_icmp_frag( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac )
+void do_ipv6_dstopt_frag_icmp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac )
 {
     struct ip6_hdr *ip6h;
     struct icmp6_hdr *icmp6h, *icmp6h_optioned;
@@ -780,7 +782,7 @@ void do_ipv6_optioned_icmp_frag( char *interface, char *srcip, char *dstip, char
     free( ethh );
 }
 
-void do_ipv6_optioned_tcp_frag( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short dstport )
+void do_ipv6_dstopt_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short dstport )
 {
     struct ip6_hdr *ip6h;
     struct tcphdr *tcph, *tcph_optioned;
@@ -1053,33 +1055,36 @@ int main( int argc, char **argv )
         case TEST_IPV4_TCP:
             do_ipv4_syn( interface, srcip, dstip, srcmac, dstmac, dstport );
             break;
-        case TEST_FRAG_IPV4_TCP:
-            do_ipv4_short_tcp_frag( interface, srcip, dstip, srcmac, dstmac, dstport );
+        case TEST_IPV4_FRAG_TCP:
+            do_ipv4_frag_tcp( interface, srcip, dstip, srcmac, dstmac, dstport );
             break;
-        case TEST_FRAG_IPV4_ICMP:
-            do_ipv4_short_icmp_frag( interface, srcip, dstip, srcmac, dstmac );
+        case TEST_IPV4_FRAG_ICMP:
+            do_ipv4_frag_icmp( interface, srcip, dstip, srcmac, dstmac );
             break;
-        case TEST_FRAG_OPTIONED_IPV4_TCP:
-            do_ipv4_optioned_tcp_frag( interface, srcip, dstip, srcmac, dstmac, dstport );
+        case TEST_IPV4_DSTOPT_FRAG_TCP:
+            do_ipv4_options_tcp_frag( interface, srcip, dstip, srcmac, dstmac, dstport );
             break;
-        case TEST_FRAG_OPTIONED_IPV4_ICMP:
-            do_ipv4_optioned_icmp_frag( interface, srcip, dstip, srcmac, dstmac );
+        case TEST_IPV4_DSTOPT_FRAG_ICMP:
+            do_ipv4_options_icmp_frag( interface, srcip, dstip, srcmac, dstmac );
             break;
 
         case TEST_IPV6_TCP:
             do_ipv6_syn( interface, srcip, dstip, srcmac, dstmac, dstport );
             break;
-        case TEST_FRAG_IPV6_TCP:
-            do_ipv6_short_tcp_frag( interface, srcip, dstip, srcmac, dstmac, dstport );
+        case TEST_IPV6_FRAG_TCP:
+            do_ipv6_frag_tcp( interface, srcip, dstip, srcmac, dstmac, dstport );
             break;
-        case TEST_FRAG_IPV6_ICMP6:
-            do_ipv6_short_icmp_frag( interface, srcip, dstip, srcmac, dstmac );
+        case TEST_IPV6_FRAG_ICMP6:
+            do_ipv6_frag_icmp( interface, srcip, dstip, srcmac, dstmac );
             break;
-        case TEST_FRAG_OPTIONED_IPV6_TCP:
-            do_ipv6_optioned_tcp_frag( interface, srcip, dstip, srcmac, dstmac, dstport );
+        case TEST_IPV6_DSTOPT_FRAG_TCP:
+            do_ipv6_dstopt_frag_tcp( interface, srcip, dstip, srcmac, dstmac, dstport );
             break;
-        case TEST_FRAG_OPTIONED_IPV6_ICMP6:
-            do_ipv6_optioned_icmp_frag( interface, srcip, dstip, srcmac, dstmac );
+        case TEST_IPV6_FRAG_DSTOPT_TCP:
+            do_ipv6_dstopt_frag_tcp( interface, srcip, dstip, srcmac, dstmac, dstport );
+            break;
+        case TEST_IPV6_DSTOPT_FRAG_ICMP6:
+            do_ipv6_dstopt_frag_icmp( interface, srcip, dstip, srcmac, dstmac );
             break;
 
         default:

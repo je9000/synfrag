@@ -33,6 +33,8 @@
 #include <string.h>
 
 #ifdef __FreeBSD__
+#include <unistd.h>
+#include <sys/socket.h>
 #include <netinet/in_systm.h>
 #endif
 

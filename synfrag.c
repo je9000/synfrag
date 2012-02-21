@@ -183,7 +183,7 @@ char * get_interface_mac( char *interface )
         for ( p = ifap; p; p = p->ifa_next ) {
             if ( ( p->ifa_addr->sa_family == AF_LINK ) && ( strcmp( p->ifa_name, interface ) == 0 ) ) {
                 struct sockaddr_dl* sdp = (struct sockaddr_dl *) p->ifa_addr;
-                char *mac_ptr = (unsigned char *) sdp->sdl_data + sdp->sdl_nlen;
+                unsigned char *mac_ptr = (unsigned char *) sdp->sdl_data + sdp->sdl_nlen;
                 sprintf( dest, "%02X:%02X:%02X:%02X:%02X:%02X",
                     mac_ptr[0],
                     mac_ptr[1],

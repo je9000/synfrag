@@ -37,4 +37,6 @@ void append_ipv4_optioned_frag1( struct ip *, char *, char *, unsigned char, uns
 void append_ipv6( struct ip6_hdr *, char *, char *, unsigned char, unsigned short );
 void append_ipv6_short_frag1( struct ip6_hdr *, char *, char *, unsigned char, unsigned short );
 void append_ipv6_optioned_frag1( struct ip6_hdr *, char *, char *, unsigned char, unsigned short, unsigned short );
+void append_ipv6_optioned2_frag1( struct ip6_hdr *, char *, char *, unsigned char, unsigned short, unsigned short );
 void append_ipv6_frag2( struct ip6_hdr *, char *, char *, unsigned char, unsigned short, unsigned short );
+void append_ipv6_2frag2( struct ip6_hdr *, char *, char *, unsigned char, unsigned short, unsigned short, unsigned short );

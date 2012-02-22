@@ -132,6 +132,7 @@ char *test_names[] = {
     "v6-frag-tcp",
     "v6-frag-icmp6",
     "v6-dstopt-frag-tcp",
+    "v6-frag-dstopt-tcp",
     "v6-dstopt-frag-icmp6",
 
     NULL
@@ -815,6 +816,39 @@ void do_ipv6_dstopt_frag_tcp( char *interface, char *srcip, char *dstip, char *s
     free( ethh );
 }
 
+void do_ipv6_frag_dstopt_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short dstport )
+{
+    struct ip6_hdr *ip6h;
+    struct tcphdr *tcph, *tcph_optioned;
+    struct ether_header *ethh;
+    int packet_size;
+    unsigned short fragid = rand();
+    unsigned short optlen = fix_up_destination_options_length(
+        MINIMUM_PACKET_SIZE - SIZEOF_IPV6 - sizeof( struct ip6_dest ) - sizeof( struct ip6_frag ) - MINIMUM_FRAGMENT_SIZE
+    );
+
+    packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + sizeof( struct ip6_dest ) + optlen + sizeof( struct ip6_frag ) + MINIMUM_FRAGMENT_SIZE;
+
+    ethh = (struct ether_header *) malloc_check( BIG_PACKET_SIZE );
+    ip6h = (struct ip6_hdr *) ( (char *) ethh + SIZEOF_ETHER );
+    tcph = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + sizeof( struct ip6_frag ) );
+    tcph_optioned = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + sizeof( struct ip6_dest ) + optlen + sizeof( struct ip6_frag ) );
+
+    append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
+    append_ipv6_optioned2_frag1( ip6h, srcip, dstip, IPPROTO_TCP, fragid, optlen );
+    append_tcp_syn( ip6h, tcph_optioned, SOURCE_PORT, dstport );
+
+    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+
+    packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + sizeof( struct ip6_frag ) + SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE;
+
+    append_ipv6_2frag2( ip6h, srcip, dstip, IPPROTO_TCP, fragid, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE, optlen );
+    memmove( tcph, (char *) tcph_optioned + MINIMUM_FRAGMENT_SIZE, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
+
+    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    free( ethh );
+}
+
 /* Process functions. */
 void fork_pcap_listener( char *dstip, char *srcip, unsigned short dstport, unsigned short srcport, enum TEST_TYPE test_type, long receive_timeout )
 {
@@ -1081,7 +1115,7 @@ int main( int argc, char **argv )
             do_ipv6_dstopt_frag_tcp( interface, srcip, dstip, srcmac, dstmac, dstport );
             break;
         case TEST_IPV6_FRAG_DSTOPT_TCP:
-            do_ipv6_dstopt_frag_tcp( interface, srcip, dstip, srcmac, dstmac, dstport );
+            do_ipv6_frag_dstopt_tcp( interface, srcip, dstip, srcmac, dstmac, dstport );
             break;
         case TEST_IPV6_DSTOPT_FRAG_ICMP6:
             do_ipv6_dstopt_frag_icmp( interface, srcip, dstip, srcmac, dstmac );

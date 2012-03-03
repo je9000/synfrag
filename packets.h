@@ -25,18 +25,18 @@
  * Author: John Eaglesham
  */
 
-void append_ethernet( struct ether_header *, char *, char *, short int );
-void append_tcp_syn( void *, struct tcphdr *, unsigned short, unsigned short );
-void append_icmp_ping( void *, struct icmp *, unsigned short );
-void append_icmp6_ping( void *, struct icmp6_hdr *, unsigned short );
-void append_bare_ipv4( struct ip *, char *, char *, unsigned char );
-void append_ipv4( struct ip *, char *, char *, unsigned char );
-void append_ipv4_short_frag1( struct ip *, char *, char *, unsigned char, unsigned short );
-void append_ipv4_frag2( struct ip *, char *, char *, unsigned char, unsigned short, unsigned short );
-void append_ipv4_optioned_frag1( struct ip *, char *, char *, unsigned char, unsigned short, unsigned short );
-void append_ipv6( struct ip6_hdr *, char *, char *, unsigned char, unsigned short );
-void append_ipv6_short_frag1( struct ip6_hdr *, char *, char *, unsigned char, unsigned short );
-void append_ipv6_optioned_frag1( struct ip6_hdr *, char *, char *, unsigned char, unsigned short, unsigned short );
-void append_ipv6_optioned2_frag1( struct ip6_hdr *, char *, char *, unsigned char, unsigned short, unsigned short );
-void append_ipv6_frag2( struct ip6_hdr *, char *, char *, unsigned char, unsigned short, unsigned short );
-void append_ipv6_2frag2( struct ip6_hdr *, char *, char *, unsigned char, unsigned short, unsigned short, unsigned short );
+void build_ethernet( struct ether_header *, char *, char *, short int );
+void *append_tcp_syn( void *, struct tcphdr *, unsigned short, unsigned short );
+void *append_icmp_ping( void *, struct icmp *, unsigned short );
+void *append_icmp6_ping( void *, struct icmp6_hdr *, unsigned short );
+void *append_bare_ipv4( struct ip *, char *, char *, unsigned char );
+void *append_ipv4( struct ip *, char *, char *, unsigned char );
+void *append_ipv4_short_frag1( struct ip *, char *, char *, unsigned char, unsigned short );
+void *append_ipv4_frag2( struct ip *, char *, char *, unsigned char, unsigned short, unsigned short );
+void *append_ipv4_optioned_frag1( struct ip *, char *, char *, unsigned char, unsigned short, unsigned short );
+void *append_ipv6( struct ip6_hdr *, char *, char *, unsigned char, unsigned short );
+void *append_ipv6_short_frag1( struct ip6_hdr *, char *, char *, unsigned char, unsigned short );
+void *append_ipv6_optioned_frag1( struct ip6_hdr *, char *, char *, unsigned char, unsigned short, unsigned short );
+void *append_ipv6_optioned2_frag1( struct ip6_hdr *, char *, char *, unsigned char, unsigned short, unsigned short );
+void *append_ipv6_frag2( struct ip6_hdr *, char *, char *, unsigned char, unsigned short, unsigned short );
+void *append_ipv6_2frag2( struct ip6_hdr *, char *, char *, unsigned char, unsigned short, unsigned short, unsigned short );

@@ -534,7 +534,7 @@ void do_ipv4_syn( char *interface, char *srcip, char *dstip, char *srcmac, char 
     iph = (struct ip *) ( (char *) ethh + SIZEOF_ETHER );
     tcph = (struct tcphdr *) ( (char *) iph + SIZEOF_IPV4 );
 
-    append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IP );
+    build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IP );
     append_ipv4( iph, srcip, dstip, IPPROTO_TCP );
     append_tcp_syn( iph, tcph, SOURCE_PORT, dstport );
 
@@ -556,7 +556,7 @@ void do_ipv4_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, 
     iph = (struct ip *) ( (char *) ethh + SIZEOF_ETHER );
     tcph = (struct tcphdr *) ( (char *) iph + SIZEOF_IPV4 );
 
-    append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IP );
+    build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IP );
     append_ipv4_short_frag1( iph, srcip, dstip, IPPROTO_TCP, fragid );
     append_tcp_syn( iph, tcph, SOURCE_PORT, dstport );
 
@@ -586,7 +586,7 @@ void do_ipv4_frag_icmp( char *interface, char *srcip, char *dstip, char *srcmac,
     iph = (struct ip *) ( (char *) ethh + SIZEOF_ETHER );
     icmph = (struct icmp *) ( (char *) iph + SIZEOF_IPV4 );
 
-    append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IP );
+    build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IP );
     append_ipv4_short_frag1( iph, srcip, dstip, IPPROTO_ICMP, fragid );
     append_icmp_ping( iph, icmph, pinglen );
 
@@ -617,7 +617,7 @@ void do_ipv4_options_tcp_frag( char *interface, char *srcip, char *dstip, char *
     tcph = (struct tcphdr *) ( (char *) iph + SIZEOF_IPV4 );
     tcph_optioned = (struct tcphdr *) ( (char *) tcph + optlen );
 
-    append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IP );
+    build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IP );
     append_ipv4_optioned_frag1( iph, srcip, dstip, IPPROTO_TCP, fragid, optlen );
     append_tcp_syn( iph, tcph_optioned, SOURCE_PORT, dstport );
 
@@ -649,7 +649,7 @@ void do_ipv4_options_icmp_frag( char *interface, char *srcip, char *dstip, char 
     icmph = (struct icmp *) ( (char *) iph + SIZEOF_IPV4 );
     icmph_optioned = (struct icmp *) ( (char *) icmph + optlen );
 
-    append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IP );
+    build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IP );
     append_ipv4_optioned_frag1( iph, srcip, dstip, IPPROTO_ICMP, fragid, optlen );
     append_icmp_ping( iph, icmph_optioned, pinglen );
 
@@ -678,7 +678,7 @@ void do_ipv6_syn( char *interface, char *srcip, char *dstip, char *srcmac, char 
     ip6h = (struct ip6_hdr *) ( (char *) ethh + SIZEOF_ETHER );
     tcph = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 );
 
-    append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
+    build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     append_ipv6( ip6h, srcip, dstip, IPPROTO_TCP, SIZEOF_TCP );
     append_tcp_syn( ip6h, tcph, SOURCE_PORT, dstport );
 
@@ -700,7 +700,7 @@ void do_ipv6_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, 
     ip6h = (struct ip6_hdr *) ( (char *) ethh + SIZEOF_ETHER );
     tcph = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + sizeof( struct ip6_frag ) );
 
-    append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
+    build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     append_ipv6_short_frag1( ip6h, srcip, dstip, IPPROTO_TCP, fragid );
     append_tcp_syn( ip6h, tcph, SOURCE_PORT, dstport );
 
@@ -730,7 +730,7 @@ void do_ipv6_frag_icmp( char *interface, char *srcip, char *dstip, char *srcmac,
     ip6h = (struct ip6_hdr *) ( (char *) ethh + SIZEOF_ETHER );
     icmp6h = (struct icmp6_hdr *) ( (char *) ip6h + SIZEOF_IPV6 + sizeof( struct ip6_frag ) );
 
-    append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
+    build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     append_ipv6_short_frag1( ip6h, srcip, dstip, IPPROTO_ICMPV6, fragid );
     append_icmp6_ping( ip6h, icmp6h, pinglen );
 
@@ -768,7 +768,7 @@ void do_ipv6_dstopt_frag_icmp( char *interface, char *srcip, char *dstip, char *
     icmp6h = (struct icmp6_hdr *) ( (char *) ip6h + SIZEOF_IPV6 + sizeof( struct ip6_frag ) );
     icmp6h_optioned = (struct icmp6_hdr *) ( (char *) ip6h + SIZEOF_IPV6 + sizeof( struct ip6_dest ) + optlen + sizeof( struct ip6_frag ) );
 
-    append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
+    build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     append_ipv6_optioned_frag1( ip6h, srcip, dstip, IPPROTO_ICMPV6, fragid, optlen );
     append_icmp6_ping( ip6h, icmp6h_optioned, pinglen );
 
@@ -801,7 +801,7 @@ void do_ipv6_dstopt_frag_tcp( char *interface, char *srcip, char *dstip, char *s
     tcph = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + sizeof( struct ip6_frag ) );
     tcph_optioned = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + sizeof( struct ip6_dest ) + optlen + sizeof( struct ip6_frag ) );
 
-    append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
+    build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     append_ipv6_optioned_frag1( ip6h, srcip, dstip, IPPROTO_TCP, fragid, optlen );
     append_tcp_syn( ip6h, tcph_optioned, SOURCE_PORT, dstport );
 
@@ -834,7 +834,7 @@ void do_ipv6_frag_dstopt_tcp( char *interface, char *srcip, char *dstip, char *s
     tcph = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + sizeof( struct ip6_frag ) );
     tcph_optioned = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + sizeof( struct ip6_dest ) + optlen + sizeof( struct ip6_frag ) );
 
-    append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
+    build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     append_ipv6_optioned2_frag1( ip6h, srcip, dstip, IPPROTO_TCP, fragid, optlen );
     append_tcp_syn( ip6h, tcph_optioned, SOURCE_PORT, dstport );
 

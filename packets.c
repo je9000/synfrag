@@ -72,7 +72,7 @@
 /* This size is fixed but extends past the standard basic icmp header. */
 #define SIZEOF_PING 8
 
-void append_ethernet( struct ether_header *ethh, char *srcmac, char *dstmac, short int ethertype )
+void build_ethernet( struct ether_header *ethh, char *srcmac, char *dstmac, short int ethertype )
 {
     if ( sscanf( srcmac, "%2hhx:%2hhx:%2hhx:%2hhx:%2hhx:%2hhx",
             &ethh->ether_shost[0],
@@ -97,7 +97,7 @@ void append_ethernet( struct ether_header *ethh, char *srcmac, char *dstmac, sho
     ethh->ether_type = htons( ethertype );
 }
 
-void append_tcp_syn( void *iph, struct tcphdr *tcph, unsigned short srcport, unsigned short dstport )
+void *append_tcp_syn( void *iph, struct tcphdr *tcph, unsigned short srcport, unsigned short dstport )
 {
     tcph->th_sport = htons( srcport );
     tcph->th_dport = htons( dstport );
@@ -109,11 +109,11 @@ void append_tcp_syn( void *iph, struct tcphdr *tcph, unsigned short srcport, uns
     tcph->th_win = TCP_WINDOW;
     tcph->th_sum = 0;
     tcph->th_urp = 0;
-    if ( do_checksum( iph, IPPROTO_TCP, SIZEOF_TCP ) != 1 )
-        errx( 1, "Unable to compute checksum (build_tcp_syn)." );
+
+    return (char *)tcph + SIZEOF_TCP;
 }
 
-void append_icmp_ping( void *iph, struct icmp *icmph, unsigned short payload_length )
+void *append_icmp_ping( void *iph, struct icmp *icmph, unsigned short payload_length )
 {
     icmph->icmp_type = ICMP_ECHO;
     icmph->icmp_code = 0;
@@ -121,11 +121,11 @@ void append_icmp_ping( void *iph, struct icmp *icmph, unsigned short payload_len
     icmph->icmp_id = htons( SOURCE_PORT );
     icmph->icmp_seq = htons( 1 );
     memset( (char *) icmph + SIZEOF_PING, 0x01, payload_length );
-    if ( do_checksum( iph, IPPROTO_ICMP, SIZEOF_PING + payload_length ) != 1 )
-        errx( 1, "Unable to compute checksum (build_icmp_ping)." );
+
+    return (char *)icmph + SIZEOF_PING + payload_length;
 }
 
-void append_icmp6_ping( void *iph, struct icmp6_hdr *icmp6h, unsigned short payload_length )
+void *append_icmp6_ping( void *iph, struct icmp6_hdr *icmp6h, unsigned short payload_length )
 {
     icmp6h->icmp6_type = ICMP6_ECHO_REQUEST;
     icmp6h->icmp6_code = 0;
@@ -133,11 +133,11 @@ void append_icmp6_ping( void *iph, struct icmp6_hdr *icmp6h, unsigned short payl
     icmp6h->icmp6_id = htons( SOURCE_PORT );
     icmp6h->icmp6_seq = htons( 1 );
     memset( (char *) icmp6h + SIZEOF_ICMP6, 0x01, payload_length );
-    if ( do_checksum( iph, IPPROTO_ICMPV6, SIZEOF_ICMP6 + payload_length ) != 1 )
-        errx( 1, "Unable to compute checksum (build_icmp6_ping)." );
+
+    return (char *)icmp6h + SIZEOF_ICMP6 + payload_length;
 }
 
-void append_bare_ipv4( struct ip *iph, char *srcip, char *dstip, unsigned char protocol )
+void *append_bare_ipv4( struct ip *iph, char *srcip, char *dstip, unsigned char protocol )
 {
     iph->ip_v = 4;
     iph->ip_hl = 5;
@@ -150,16 +150,16 @@ void append_bare_ipv4( struct ip *iph, char *srcip, char *dstip, unsigned char p
     iph->ip_sum = 0;
     iph->ip_src.s_addr = inet_addr(srcip);
     iph->ip_dst.s_addr = inet_addr(dstip);
+
+    return (char *)iph + SIZEOF_IPV4;
 }
 
-void append_ipv4( struct ip *iph, char *srcip, char *dstip, unsigned char protocol )
+void *append_ipv4( struct ip *iph, char *srcip, char *dstip, unsigned char protocol )
 {
-    append_bare_ipv4( iph, srcip, dstip, protocol );
-    if ( do_checksum( (char *) iph, IPPROTO_IP, iph->ip_hl * 4 ) != 1 )
-        errx( 1, "Unable to compute checksum (build_ipv4)." );
+    return append_bare_ipv4( iph, srcip, dstip, protocol );
 }
 
-void append_ipv4_short_frag1( struct ip *iph, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid )
+void *append_ipv4_short_frag1( struct ip *iph, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid )
 {
     append_bare_ipv4( iph, srcip, dstip, protocol );
     iph->ip_off = htons( 1 << IP_FLAGS_OFFSET ); /* Set More Fragments (MF) bit */
@@ -169,7 +169,7 @@ void append_ipv4_short_frag1( struct ip *iph, char *srcip, char *dstip, unsigned
         errx( 1, "Unable to compute checksum (build_ipv4_short_frag1)." );
 }
 
-void append_ipv4_frag2( struct ip *iph, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short payload_length )
+void *append_ipv4_frag2( struct ip *iph, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short payload_length )
 {
     append_bare_ipv4( iph, srcip, dstip, protocol );
     iph->ip_off = htons( 1 );
@@ -179,7 +179,7 @@ void append_ipv4_frag2( struct ip *iph, char *srcip, char *dstip, unsigned char 
         errx( 1, "Unable to compute checksum (build_ipv4_frag2)." );
 }
 
-void append_ipv4_optioned_frag1( struct ip *iph, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short optlen )
+void *append_ipv4_optioned_frag1( struct ip *iph, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short optlen )
 {
     append_bare_ipv4( iph, srcip, dstip, protocol );
     iph->ip_off = htons( 1 << IP_FLAGS_OFFSET ); /* Set More Fragments (MF) bit */
@@ -196,7 +196,7 @@ void append_ipv4_optioned_frag1( struct ip *iph, char *srcip, char *dstip, unsig
         errx( 1, "Unable to compute checksum (build_ipv4_optioned_frag1)." );
 }
 
-void append_ipv6( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short payload_length )
+void *append_ipv6( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short payload_length )
 {
     /* 4 bits version, 8 bits TC, 20 bits flow-ID. We only set the version bits. */
     ip6h->ip6_flow = htonl( 0x06 << 28 );
@@ -207,7 +207,7 @@ void append_ipv6( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char 
     if ( !inet_pton( AF_INET6, dstip, &ip6h->ip6_dst ) ) errx( 1, "Invalid source address" );
 }
 
-void append_ipv6_short_frag1( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid )
+void *append_ipv6_short_frag1( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid )
 {
     struct ip6_frag *fragh = (struct ip6_frag *) ( (char *)ip6h + SIZEOF_IPV6 );
 
@@ -225,7 +225,7 @@ void append_ipv6_short_frag1( struct ip6_hdr *ip6h, char *srcip, char *dstip, un
     fragh->ip6f_offlg = IP6F_MORE_FRAG;
 }
 
-void append_ipv6_optioned_frag1( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short optlen )
+void *append_ipv6_optioned_frag1( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short optlen )
 {
     struct ip6_dest *desth = (struct ip6_dest *) ( (char *)ip6h + SIZEOF_IPV6 );
     struct ip6_frag *fragh = (struct ip6_frag *) ( (char *)ip6h + SIZEOF_IPV6 + sizeof( struct ip6_dest ) + optlen );
@@ -252,7 +252,7 @@ void append_ipv6_optioned_frag1( struct ip6_hdr *ip6h, char *srcip, char *dstip,
     fragh->ip6f_offlg = IP6F_MORE_FRAG;
 }
 
-void append_ipv6_optioned2_frag1( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short optlen )
+void *append_ipv6_optioned2_frag1( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short optlen )
 {
     struct ip6_dest *desth = (struct ip6_dest *) ( (char *)ip6h + SIZEOF_IPV6 + sizeof( struct ip6_frag ));
     struct ip6_frag *fragh = (struct ip6_frag *) ( (char *)ip6h + SIZEOF_IPV6);
@@ -279,7 +279,7 @@ void append_ipv6_optioned2_frag1( struct ip6_hdr *ip6h, char *srcip, char *dstip
     memset( (char *) desth + sizeof( struct ip6_dest ) + 2, 0, optlen - 2 );
 }
 
-void append_ipv6_frag2( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short payload_length )
+void *append_ipv6_frag2( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short payload_length )
 {
     struct ip6_frag *fragh = (struct ip6_frag *) ( (char *)ip6h + SIZEOF_IPV6 );
 
@@ -297,7 +297,7 @@ void append_ipv6_frag2( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned
     fragh->ip6f_offlg = htons( 1 << 3 );
 }
 
-void append_ipv6_2frag2( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short payload_length, unsigned short optlen )
+void *append_ipv6_2frag2( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short payload_length, unsigned short optlen )
 {
     struct ip6_frag *fragh = (struct ip6_frag *) ( (char *)ip6h + SIZEOF_IPV6 );
     unsigned short offset = optlen + sizeof( struct ip6_dest ) + MINIMUM_FRAGMENT_SIZE;

@@ -67,6 +67,7 @@
 #include "flag_names.h"
 #include "packets.h"
 #include "constants.h"
+#include "checksums.h"
 
 /*
  * XXX We don't close the pcap device on failure anywhere. The OS will do it
@@ -229,6 +230,17 @@ unsigned short fix_up_destination_options_length( unsigned short optlen )
         optlen += x;
     }
     return optlen;
+}
+
+void calc_checksum( void *iph, int protocol, int len )
+{
+    if ( do_checksum( iph, protocol, len ) == 0 ) {
+        fprintf(
+            stderr,
+            "Warning: Failed to calculate packet checksum for protocol %i. This is probably a bug.\n",
+            protocol
+        );
+    }
 }
 
 void print_ethh( struct ether_header *ethh )
@@ -537,6 +549,8 @@ void do_ipv4_syn( char *interface, char *srcip, char *dstip, char *srcmac, char 
     build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IP );
     append_ipv4( iph, srcip, dstip, IPPROTO_TCP );
     append_tcp_syn( iph, tcph, SOURCE_PORT, dstport );
+    calc_checksum( iph, IPPROTO_TCP, SIZEOF_TCP );
+    calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 );
 
     if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
     free( ethh );
@@ -559,6 +573,8 @@ void do_ipv4_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, 
     build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IP );
     append_ipv4_short_frag1( iph, srcip, dstip, IPPROTO_TCP, fragid );
     append_tcp_syn( iph, tcph, SOURCE_PORT, dstport );
+    calc_checksum( iph, IPPROTO_TCP, SIZEOF_TCP );
+    calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 );
 
     if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
 
@@ -566,6 +582,7 @@ void do_ipv4_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, 
 
     append_ipv4_frag2( iph, srcip, dstip, IPPROTO_TCP, fragid, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
     memmove( tcph, (char *) tcph + MINIMUM_FRAGMENT_SIZE, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
+    calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 );
 
     if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
     free( ethh );
@@ -589,6 +606,8 @@ void do_ipv4_frag_icmp( char *interface, char *srcip, char *dstip, char *srcmac,
     build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IP );
     append_ipv4_short_frag1( iph, srcip, dstip, IPPROTO_ICMP, fragid );
     append_icmp_ping( iph, icmph, pinglen );
+    calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 );
+    calc_checksum( iph, IPPROTO_ICMP, SIZEOF_PING + pinglen );
 
     if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
 
@@ -596,6 +615,7 @@ void do_ipv4_frag_icmp( char *interface, char *srcip, char *dstip, char *srcmac,
 
     append_ipv4_frag2( iph, srcip, dstip, IPPROTO_ICMP, fragid, SIZEOF_PING + pinglen - MINIMUM_FRAGMENT_SIZE );
     memmove( icmph, (char *) icmph + MINIMUM_FRAGMENT_SIZE, SIZEOF_PING + pinglen - MINIMUM_FRAGMENT_SIZE );
+    calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 );
 
     if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
     free( ethh );
@@ -620,6 +640,8 @@ void do_ipv4_options_tcp_frag( char *interface, char *srcip, char *dstip, char *
     build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IP );
     append_ipv4_optioned_frag1( iph, srcip, dstip, IPPROTO_TCP, fragid, optlen );
     append_tcp_syn( iph, tcph_optioned, SOURCE_PORT, dstport );
+    calc_checksum( iph, IPPROTO_TCP, SIZEOF_TCP );
+    calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 + optlen );
 
     if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
 
@@ -627,6 +649,7 @@ void do_ipv4_options_tcp_frag( char *interface, char *srcip, char *dstip, char *
 
     append_ipv4_frag2( iph, srcip, dstip, IPPROTO_TCP, fragid, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
     memmove( tcph, (char *) tcph_optioned + MINIMUM_FRAGMENT_SIZE, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
+    calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 );
 
     if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
     free( ethh );
@@ -652,6 +675,8 @@ void do_ipv4_options_icmp_frag( char *interface, char *srcip, char *dstip, char 
     build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IP );
     append_ipv4_optioned_frag1( iph, srcip, dstip, IPPROTO_ICMP, fragid, optlen );
     append_icmp_ping( iph, icmph_optioned, pinglen );
+    calc_checksum( iph, IPPROTO_ICMP, SIZEOF_PING + pinglen );
+    calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 + optlen );
 
     if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
 
@@ -659,6 +684,7 @@ void do_ipv4_options_icmp_frag( char *interface, char *srcip, char *dstip, char 
 
     append_ipv4_frag2( iph, srcip, dstip, IPPROTO_ICMP, fragid, SIZEOF_PING - MINIMUM_FRAGMENT_SIZE + pinglen );
     memmove( icmph, (char *) icmph_optioned + MINIMUM_FRAGMENT_SIZE, SIZEOF_PING + pinglen - MINIMUM_FRAGMENT_SIZE );
+    calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 );
 
     if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
     free( ethh );

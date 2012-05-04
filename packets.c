@@ -187,7 +187,7 @@ void *append_ipv4_optioned_frag1( struct ip *iph, char *srcip, char *dstip, unsi
     iph->ip_len = htons( SIZEOF_IPV4 + optlen + MINIMUM_FRAGMENT_SIZE );
 
     if ( optlen % 4 != 0 ) errx( 1, "optlen must be a multiple of 4" );
-    iph->ip_hl = 5 + optlen;
+    iph->ip_hl = 5 + ( optlen / 4 );
 
     /* Pad with NOP's and then end-of-padding option. */
     memset( (char *) iph + SIZEOF_IPV4, 0x01, optlen );

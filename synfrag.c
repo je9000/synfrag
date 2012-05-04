@@ -234,10 +234,10 @@ unsigned short fix_up_destination_options_length( unsigned short optlen )
 
 void calc_checksum( void *iph, int protocol, int len )
 {
-    if ( do_checksum( iph, protocol, len ) == 0 ) {
+    if ( do_checksum( iph, protocol, len ) <= 0 ) {
         fprintf(
             stderr,
-            "Warning: Failed to calculate packet checksum for protocol %i. This is probably a bug.\n",
+            "Warning: Failed to calculate checksum for protocol %i. This is probably a bug.\n",
             protocol
         );
     }
@@ -707,6 +707,7 @@ void do_ipv6_syn( char *interface, char *srcip, char *dstip, char *srcmac, char 
     build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     append_ipv6( ip6h, srcip, dstip, IPPROTO_TCP, SIZEOF_TCP );
     append_tcp_syn( ip6h, tcph, SOURCE_PORT, dstport );
+    calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
     if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
     free( ethh );
@@ -729,6 +730,7 @@ void do_ipv6_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, 
     build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     append_ipv6_short_frag1( ip6h, srcip, dstip, IPPROTO_TCP, fragid );
     append_tcp_syn( ip6h, tcph, SOURCE_PORT, dstport );
+    calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
     if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
 
@@ -759,13 +761,14 @@ void do_ipv6_frag_icmp( char *interface, char *srcip, char *dstip, char *srcmac,
     build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     append_ipv6_short_frag1( ip6h, srcip, dstip, IPPROTO_ICMPV6, fragid );
     append_icmp6_ping( ip6h, icmp6h, pinglen );
+    calc_checksum( ip6h, IPPROTO_ICMPV6, SIZEOF_ICMP6 + pinglen );
 
     if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
 
-    packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + sizeof( struct ip6_frag ) + SIZEOF_PING + pinglen - MINIMUM_FRAGMENT_SIZE;
+    packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + sizeof( struct ip6_frag ) + SIZEOF_ICMP6 + pinglen - MINIMUM_FRAGMENT_SIZE;
 
-    append_ipv6_frag2( ip6h, srcip, dstip, IPPROTO_ICMPV6, fragid, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
-    memmove( icmp6h, (char *) icmp6h + MINIMUM_FRAGMENT_SIZE, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
+    append_ipv6_frag2( ip6h, srcip, dstip, IPPROTO_ICMPV6, fragid, SIZEOF_ICMP6 + pinglen - MINIMUM_FRAGMENT_SIZE );
+    memmove( icmp6h, (char *) icmp6h + MINIMUM_FRAGMENT_SIZE, SIZEOF_ICMP6 + pinglen - MINIMUM_FRAGMENT_SIZE );
 
     if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
     free( ethh );
@@ -797,6 +800,7 @@ void do_ipv6_dstopt_frag_icmp( char *interface, char *srcip, char *dstip, char *
     build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     append_ipv6_optioned_frag1( ip6h, srcip, dstip, IPPROTO_ICMPV6, fragid, optlen );
     append_icmp6_ping( ip6h, icmp6h_optioned, pinglen );
+    calc_checksum( ip6h, IPPROTO_ICMPV6, SIZEOF_ICMP6 + pinglen );
 
     if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
 
@@ -830,6 +834,7 @@ void do_ipv6_dstopt_frag_tcp( char *interface, char *srcip, char *dstip, char *s
     build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     append_ipv6_optioned_frag1( ip6h, srcip, dstip, IPPROTO_TCP, fragid, optlen );
     append_tcp_syn( ip6h, tcph_optioned, SOURCE_PORT, dstport );
+    calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
     if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
 
@@ -863,6 +868,7 @@ void do_ipv6_frag_dstopt_tcp( char *interface, char *srcip, char *dstip, char *s
     build_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     append_ipv6_optioned2_frag1( ip6h, srcip, dstip, IPPROTO_TCP, fragid, optlen );
     append_tcp_syn( ip6h, tcph_optioned, SOURCE_PORT, dstport );
+    calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
     if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
 

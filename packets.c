@@ -73,8 +73,9 @@
 /* This size is fixed but extends past the standard basic icmp header. */
 #define SIZEOF_PING 8
 
-void *append_ethernet( struct ether_header *ethh, char *srcmac, char *dstmac, short int ethertype )
+void *append_ethernet( void *buf, char *srcmac, char *dstmac, short int ethertype )
 {
+    struct ether_header *ethh = buf;
     if ( sscanf( srcmac, "%2hhx:%2hhx:%2hhx:%2hhx:%2hhx:%2hhx",
             &ethh->ether_shost[0],
             &ethh->ether_shost[1],
@@ -99,8 +100,10 @@ void *append_ethernet( struct ether_header *ethh, char *srcmac, char *dstmac, sh
     return (char *) ethh + SIZEOF_ETHER;
 }
 
-void *append_tcp_syn( void *iph, struct tcphdr *tcph, unsigned short srcport, unsigned short dstport )
+void *append_tcp_syn( void *buf, unsigned short srcport, unsigned short dstport )
 {
+    struct tcphdr *tcph = buf;
+
     tcph->th_sport = htons( srcport );
     tcph->th_dport = htons( dstport );
     tcph->th_seq = htonl( rand() );
@@ -115,8 +118,10 @@ void *append_tcp_syn( void *iph, struct tcphdr *tcph, unsigned short srcport, un
     return (char *)tcph + SIZEOF_TCP;
 }
 
-void *append_icmp_ping( void *iph, struct icmp *icmph, unsigned short payload_length )
+void *append_icmp_ping( void *buf, unsigned short payload_length )
 {
+    struct icmp *icmph = buf;
+
     icmph->icmp_type = ICMP_ECHO;
     icmph->icmp_code = 0;
     icmph->icmp_cksum = 0;
@@ -127,8 +132,10 @@ void *append_icmp_ping( void *iph, struct icmp *icmph, unsigned short payload_le
     return (char *)icmph + SIZEOF_PING + payload_length;
 }
 
-void *append_icmp6_ping( void *iph, struct icmp6_hdr *icmp6h, unsigned short payload_length )
+void *append_icmp6_ping( void *buf, unsigned short payload_length )
 {
+    struct icmp6_hdr *icmp6h = buf;
+
     icmp6h->icmp6_type = ICMP6_ECHO_REQUEST;
     icmp6h->icmp6_code = 0;
     icmp6h->icmp6_cksum = 0;
@@ -139,8 +146,10 @@ void *append_icmp6_ping( void *iph, struct icmp6_hdr *icmp6h, unsigned short pay
     return (char *)icmp6h + SIZEOF_ICMP6 + payload_length;
 }
 
-void *append_bare_ipv4( struct ip *iph, char *srcip, char *dstip, unsigned char protocol )
+void *append_bare_ipv4( void *buf, char *srcip, char *dstip, unsigned char protocol )
 {
+    struct ip *iph = buf;
+
     iph->ip_v = 4;
     iph->ip_hl = 5;
     iph->ip_tos = 0;
@@ -156,13 +165,15 @@ void *append_bare_ipv4( struct ip *iph, char *srcip, char *dstip, unsigned char 
     return (char *)iph + SIZEOF_IPV4;
 }
 
-void *append_ipv4( struct ip *iph, char *srcip, char *dstip, unsigned char protocol )
+void *append_ipv4( void *buf, char *srcip, char *dstip, unsigned char protocol )
 {
-    return append_bare_ipv4( iph, srcip, dstip, protocol );
+    return append_bare_ipv4( buf, srcip, dstip, protocol );
 }
 
-void *append_ipv4_short_frag1( struct ip *iph, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid )
+void *append_ipv4_short_frag1( void *buf, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid )
 {
+    struct ip *iph = buf;
+
     append_bare_ipv4( iph, srcip, dstip, protocol );
     iph->ip_off = htons( 1 << IP_FLAGS_OFFSET ); /* Set More Fragments (MF) bit */
     iph->ip_id = htons( fragid );
@@ -171,8 +182,10 @@ void *append_ipv4_short_frag1( struct ip *iph, char *srcip, char *dstip, unsigne
     return (char *)iph + SIZEOF_IPV4;
 }
 
-void *append_ipv4_frag2( struct ip *iph, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short payload_length )
+void *append_ipv4_frag2( void *buf, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short payload_length )
 {
+    struct ip *iph = buf;
+
     append_bare_ipv4( iph, srcip, dstip, protocol );
     iph->ip_off = htons( 1 );
     iph->ip_id = htons( fragid );
@@ -181,8 +194,10 @@ void *append_ipv4_frag2( struct ip *iph, char *srcip, char *dstip, unsigned char
     return (char *) iph + SIZEOF_IPV4;
 }
 
-void *append_ipv4_optioned_frag1( struct ip *iph, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short optlen )
+void *append_ipv4_optioned_frag1( void *buf, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short optlen )
 {
+    struct ip *iph = buf;
+
     append_bare_ipv4( iph, srcip, dstip, protocol );
     iph->ip_off = htons( 1 << IP_FLAGS_OFFSET ); /* Set More Fragments (MF) bit */
     iph->ip_id = htons( fragid );
@@ -198,8 +213,10 @@ void *append_ipv4_optioned_frag1( struct ip *iph, char *srcip, char *dstip, unsi
     return (char *) iph + SIZEOF_IPV4 + optlen;
 }
 
-void *append_ipv6( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short payload_length )
+void *append_ipv6( void *buf, char *srcip, char *dstip, unsigned char protocol, unsigned short payload_length )
 {
+    struct ip6_hdr *ip6h = buf;
+
     /* 4 bits version, 8 bits TC, 20 bits flow-ID. We only set the version bits. */
     ip6h->ip6_flow = htonl( 0x06 << 28 );
     ip6h->ip6_plen = htons( payload_length );
@@ -218,6 +235,8 @@ void *append_frag( void *buf, unsigned char protocol, unsigned short offset, uns
     fragh->ip6f_reserved = 0;
     fragh->ip6f_nxt = protocol;
     fragh->ip6f_ident = htons( fragid );
+    if ( offset % 8 != 0 ) errx( 1, "wrong size" );
+    offset = offset / 8;
     fragh->ip6f_offlg = htons( offset << 3 );
     if ( more ) fragh->ip6f_offlg |= IP6F_MORE_FRAG;
 
@@ -236,112 +255,5 @@ void *append_dest( void *buf, unsigned char protocol, unsigned char optlen )
     memset( (char *) desth + sizeof( struct ip6_dest ) + 2, 0, optlen - 2 );
 
     return (char *) buf + sizeof( struct ip6_dest ) + optlen;
-}
-
-void *append_ipv6_short_frag1( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid )
-{
-    struct ip6_frag *fragh = (struct ip6_frag *) ( (char *)ip6h + SIZEOF_IPV6 );
-
-    /* 4 bits version, 8 bits TC, 20 bits flow-ID. We only set the version bits. */
-    ip6h->ip6_flow = htonl( 0x06 << 28 );
-    ip6h->ip6_plen = htons( sizeof( struct ip6_frag ) + MINIMUM_FRAGMENT_SIZE );
-    ip6h->ip6_hlim = 64;
-    ip6h->ip6_nxt = IPPROTO_FRAGMENT;
-    if ( !inet_pton( AF_INET6, srcip, &ip6h->ip6_src ) ) errx( 1, "Invalid source address" );
-    if ( !inet_pton( AF_INET6, dstip, &ip6h->ip6_dst ) ) errx( 1, "Invalid source address" );
-
-    fragh->ip6f_reserved = 0;
-    fragh->ip6f_nxt = protocol;
-    fragh->ip6f_ident = htons( fragid );
-    fragh->ip6f_offlg = IP6F_MORE_FRAG;
-
-    return (char *)ip6h + SIZEOF_IPV6 + sizeof( struct ip6_frag );
-}
-
-void *append_ipv6_optioned_frag1( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short optlen )
-{
-    struct ip6_dest *desth = (struct ip6_dest *) ( (char *)ip6h + SIZEOF_IPV6 );
-    struct ip6_frag *fragh = (struct ip6_frag *) ( (char *)ip6h + SIZEOF_IPV6 + sizeof( struct ip6_dest ) + optlen );
-
-    /* 4 bits version, 8 bits TC, 20 bits flow-ID. We only set the version bits. */
-    ip6h->ip6_flow = htonl( 0x06 << 28 );
-    ip6h->ip6_plen = htons( sizeof( struct ip6_dest ) + optlen + sizeof( struct ip6_frag ) + MINIMUM_FRAGMENT_SIZE );
-    ip6h->ip6_hlim = 64;
-    ip6h->ip6_nxt = IPPROTO_DSTOPTS;
-    if ( !inet_pton( AF_INET6, srcip, &ip6h->ip6_src ) ) errx( 1, "Invalid source address" );
-    if ( !inet_pton( AF_INET6, dstip, &ip6h->ip6_dst ) ) errx( 1, "Invalid source address" );
-
-    if ( optlen == 0 || optlen % 8 != 6 ) errx( 1, "optlen value not supported" );
-    desth->ip6d_nxt = IPPROTO_FRAGMENT;
-    desth->ip6d_len = optlen / 8;
-
-    *( (char *) desth + sizeof( struct ip6_dest ) ) = 1;
-    *( (char *) desth + sizeof( struct ip6_dest ) + 1 ) = optlen - 2;
-    memset( (char *) desth + sizeof( struct ip6_dest ) + 2, 0, optlen - 2 );
-
-    fragh->ip6f_reserved = 0;
-    fragh->ip6f_nxt = protocol;
-    fragh->ip6f_ident = htons( fragid );
-    fragh->ip6f_offlg = IP6F_MORE_FRAG;
-
-    return (char *)ip6h + SIZEOF_IPV6 + sizeof( struct ip6_frag ) + sizeof( struct ip6_dest ) + optlen;
-}
-
-void *append_ipv6_optioned2_frag1( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short optlen )
-{
-    struct ip6_dest *desth = (struct ip6_dest *) ( (char *)ip6h + SIZEOF_IPV6 + sizeof( struct ip6_frag ));
-    struct ip6_frag *fragh = (struct ip6_frag *) ( (char *)ip6h + SIZEOF_IPV6);
-
-    /* 4 bits version, 8 bits TC, 20 bits flow-ID. We only set the version bits. */
-    ip6h->ip6_flow = htonl( 0x06 << 28 );
-    ip6h->ip6_plen = htons( sizeof( struct ip6_dest ) + optlen + sizeof( struct ip6_frag ) + MINIMUM_FRAGMENT_SIZE );
-    ip6h->ip6_hlim = 64;
-    ip6h->ip6_nxt = IPPROTO_FRAGMENT;
-    if ( !inet_pton( AF_INET6, srcip, &ip6h->ip6_src ) ) errx( 1, "Invalid source address" );
-    if ( !inet_pton( AF_INET6, dstip, &ip6h->ip6_dst ) ) errx( 1, "Invalid source address" );
-
-    fragh->ip6f_reserved = 0;
-    fragh->ip6f_nxt = IPPROTO_DSTOPTS;
-    fragh->ip6f_ident = htons( fragid );
-    fragh->ip6f_offlg = IP6F_MORE_FRAG;
-
-    if ( optlen == 0 || optlen % 8 != 6 ) errx( 1, "optlen value not supported" );
-    desth->ip6d_nxt = protocol;
-    desth->ip6d_len = optlen / 8;
-
-    *( (char *) desth + sizeof( struct ip6_dest ) ) = 1;
-    *( (char *) desth + sizeof( struct ip6_dest ) + 1 ) = optlen - 2;
-    memset( (char *) desth + sizeof( struct ip6_dest ) + 2, 0, optlen - 2 );
-
-    return (char *)ip6h + SIZEOF_IPV6 + sizeof( struct ip6_frag ) + sizeof( struct ip6_dest ) + optlen;
-}
-
-void *append_ipv6_frag2( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short payload_length )
-{
-    return append_ipv6_frag2_offset( ip6h, srcip, dstip, protocol, fragid, payload_length, 8 );
-}
-
-void *append_ipv6_frag2_offset( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short payload_length, unsigned short optlen )
-{
-    struct ip6_frag *fragh = (struct ip6_frag *) ( (char *)ip6h + SIZEOF_IPV6 );
-    unsigned short offset = optlen + sizeof( struct ip6_dest ) + MINIMUM_FRAGMENT_SIZE;
-
-    if ( offset % 8 != 0 ) errx( 1, "wrong size" );
-    offset = offset / 8;
-
-    /* 4 bits version, 8 bits TC, 20 bits flow-ID. We only set the version bits. */
-    ip6h->ip6_flow = htonl( 0x06 << 28 );
-    ip6h->ip6_plen = htons( payload_length + sizeof( struct ip6_frag ) );
-    ip6h->ip6_hlim = 64;
-    ip6h->ip6_nxt = IPPROTO_FRAGMENT;
-    if ( !inet_pton( AF_INET6, srcip, &ip6h->ip6_src ) ) errx( 1, "Invalid source address" );
-    if ( !inet_pton( AF_INET6, dstip, &ip6h->ip6_dst ) ) errx( 1, "Invalid source address" );
-
-    fragh->ip6f_reserved = 0;
-    fragh->ip6f_nxt = IPPROTO_DSTOPTS;
-    fragh->ip6f_ident = htons( fragid );
-    fragh->ip6f_offlg = htons( offset << 3 );
-
-    return (char *)ip6h + SIZEOF_IPV6 + sizeof( struct ip6_frag );
 }
 

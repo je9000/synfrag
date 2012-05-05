@@ -40,3 +40,6 @@ void *append_ipv6_optioned_frag1( struct ip6_hdr *, char *, char *, unsigned cha
 void *append_ipv6_optioned2_frag1( struct ip6_hdr *, char *, char *, unsigned char, unsigned short, unsigned short );
 void *append_ipv6_frag2( struct ip6_hdr *, char *, char *, unsigned char, unsigned short, unsigned short );
 void *append_ipv6_frag2_offset( struct ip6_hdr *, char *, char *, unsigned char, unsigned short, unsigned short, unsigned short );
+
+#define append_ipv6_frag_first( buf, proto, fragid ) append_ipv6_frag( buf, proto, 0, fragid, 1 )
+#define append_ipv6_frag_last( buf, proto, offset, fragid ) append_ipv6_frag( buf, proto, offset, fragid, 0 )

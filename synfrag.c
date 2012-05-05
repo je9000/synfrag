@@ -251,19 +251,20 @@ void calc_checksum( void *iph, int protocol, int len )
 char *print_a_packet( char *, int, unsigned short );
 void synfrag_send( void *packet, int len )
 {
-    printf( "Sending packet:\n\n" );
+    static unsigned int packets_sent = 1;
+    printf( "Sending packet %u:\n\n", packets_sent++ );
     print_a_packet( packet, len, 0 );
+    putchar( '\n' );
     if ( pcap_inject( pcap, packet, len ) != len ) errx( 1, "pcap_inject" );
 }
 
 void print_ethh( struct ether_header *ethh )
 {
-    printf( "Ethernet Frame, ethertype 0x%04X (%s)\n",
-        ntohs( ethh->ether_type ),
-        ether_protocol_to_name( ntohs( ethh->ether_type ) )
+    printf( "Ethernet Frame: \n Ethertype: 0x%04X (%s)\n",
+        ntohs( ethh->ether_type ), ether_protocol_to_name( ntohs( ethh->ether_type ) )
     );
 
-    printf( " Src MAC %02X:%02X:%02X:%02X:%02X:%02X\n",
+    printf( " Src MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
         ethh->ether_shost[0],
         ethh->ether_shost[1],
         ethh->ether_shost[2],
@@ -271,15 +272,13 @@ void print_ethh( struct ether_header *ethh )
         ethh->ether_shost[4],
         ethh->ether_shost[5] );
 
-    printf( " Dest MAC %02X:%02X:%02X:%02X:%02X:%02X\n",
+    printf( " Dest MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
         ethh->ether_dhost[0],
         ethh->ether_dhost[1],
         ethh->ether_dhost[2],
         ethh->ether_dhost[3],
         ethh->ether_dhost[4],
         ethh->ether_dhost[5] );
-
-    printf( "\n" );
 }
 
 void print_iph( struct ip *iph )
@@ -288,8 +287,8 @@ void print_iph( struct ip *iph )
     char dstbuf[INET_ADDRSTRLEN];
     char *flag_names = ip_flags_to_names( ntohs( iph->ip_off ) >> IP_FLAGS_OFFSET );
 
-    if ( inet_ntop( AF_INET, &iph->ip_src, (char *) &srcbuf, INET_ADDRSTRLEN ) == NULL ) err( 1, "inet_ntop failed" );
-    if ( inet_ntop( AF_INET, &iph->ip_dst, (char *) &dstbuf, INET_ADDRSTRLEN ) == NULL ) err( 1, "inet_ntop failed" );
+    if ( inet_ntop( AF_INET, &iph->ip_src, (char *) &srcbuf, INET_ADDRSTRLEN ) == NULL ) errx( 1, "inet_ntop failed" );
+    if ( inet_ntop( AF_INET, &iph->ip_dst, (char *) &dstbuf, INET_ADDRSTRLEN ) == NULL ) errx( 1, "inet_ntop failed" );
 
     printf( "IPv4 Packet:\n\
  Src IP: %s\n\
@@ -297,18 +296,13 @@ void print_iph( struct ip *iph )
  Protocol: %i (%s)\n\
  Frag Offset: %i (%i bytes)\n\
  Flags: %i (%s)\n\
- Iphl: %i (%i bytes)\n\
-\n",
+ Iphl: %i (%i bytes)\n",
         (char *) &srcbuf,
         (char *) &dstbuf,
-        iph->ip_p,
-        ip_protocol_to_name( iph->ip_p ),
-        ntohs( iph->ip_off ) & 0x1FFF,
-        ( ntohs( iph->ip_off ) & 0x1FFF ) * FRAGMENT_OFFSET_TO_BYTES,
-        ntohs( iph->ip_off ) >> IP_FLAGS_OFFSET,
-        flag_names,
-        iph->ip_hl,
-        iph->ip_hl * 4
+        iph->ip_p, ip_protocol_to_name( iph->ip_p ),
+        ntohs( iph->ip_off ) & 0x1FFF, ( ntohs( iph->ip_off ) & 0x1FFF ) * FRAGMENT_OFFSET_TO_BYTES,
+        ntohs( iph->ip_off ) >> IP_FLAGS_OFFSET, flag_names,
+        iph->ip_hl, iph->ip_hl * 4
     );
     free( flag_names );
 }
@@ -325,12 +319,10 @@ void print_ip6h( struct ip6_hdr *ip6h )
  Src IP: %s\n\
  Dst IP: %s\n\
  Protocol: %i (%s)\n\
- Payload Len: %i\n\
-\n",
+ Payload Len: %i\n",
         (char *) &srcbuf,
         (char *) &dstbuf,
-        ip6h->ip6_nxt,
-        ip_protocol_to_name( ip6h->ip6_nxt ),
+        ip6h->ip6_nxt, ip_protocol_to_name( ip6h->ip6_nxt ),
         ntohs( ip6h->ip6_plen )
     );
 }
@@ -340,15 +332,12 @@ void print_icmph( struct icmp *icmph )
     printf( "ICMP Packet:\n\
  Type: %i (%s)\n\
  Code: %i (%s)\n",
-        icmph->icmp_type,
-        icmp_type_to_name( icmph->icmp_type ),
-        icmph->icmp_code,
-        icmp_code_to_name( icmph->icmp_type, icmph->icmp_code )
+        icmph->icmp_type, icmp_type_to_name( icmph->icmp_type ),
+        icmph->icmp_code, icmp_code_to_name( icmph->icmp_type, icmph->icmp_code )
     );
     if ( ( icmph->icmp_type == ICMP_ECHO || icmph->icmp_type == ICMP_ECHOREPLY ) && ( icmph->icmp_code == 0 ) ) {
         printf( " Echo id: %i\n", htons( icmph->icmp_id ) );
     }
-    printf( "\n" );
 }
 
 void print_icmp6h( struct icmp6_hdr *icmp6h )
@@ -356,15 +345,12 @@ void print_icmp6h( struct icmp6_hdr *icmp6h )
     printf( "ICMPv6 Packet:\n\
  Type: %i (%s)\n\
  Code: %i (%s)\n",
-        icmp6h->icmp6_type,
-        icmp6_type_to_name( icmp6h->icmp6_type ),
-        icmp6h->icmp6_code,
-        icmp6_code_to_name( icmp6h->icmp6_type, icmp6h->icmp6_code )
+        icmp6h->icmp6_type, icmp6_type_to_name( icmp6h->icmp6_type ),
+        icmp6h->icmp6_code, icmp6_code_to_name( icmp6h->icmp6_type, icmp6h->icmp6_code )
     );
     if ( ( icmp6h->icmp6_type == ICMP6_ECHO_REQUEST || icmp6h->icmp6_type == ICMP6_ECHO_REPLY ) && ( icmp6h->icmp6_code == 0 ) ) {
         printf( " Echo id: %i\n", htons( icmp6h->icmp6_id ) );
     }
-    printf( "\n" );
 }
 
 void print_tcph( struct tcphdr *tcph )
@@ -375,8 +361,7 @@ void print_tcph( struct tcphdr *tcph )
  Dst Port: %u\n\
  Seq Num: %u\n\
  Ack Num: %u\n\
- Flags: %i (%s)\n\
-\n",
+ Flags: %i (%s)\n",
         ntohs( tcph->th_sport ),
         ntohs( tcph->th_dport ),
         ntohl( tcph->th_seq ),
@@ -393,9 +378,7 @@ void print_fragh( struct ip6_frag *fragh )
  Ident: %i\n\
  Offlg: 0x%04x\n\
  Offset: %i (%i bytes)\n\
- More Frags: %i\n\
-\n",
-
+ More Frags: %i\n",
         fragh->ip6f_nxt, ip_protocol_to_name( fragh->ip6f_nxt ),
         ntohs( fragh->ip6f_ident ),
         ntohs( fragh->ip6f_offlg ),
@@ -408,9 +391,7 @@ void print_dstopth( struct ip6_dest *desth )
 {
     printf( "Destination Options Header:\n\
  Next Header: %i (%s)\n\
- Length: %i (%i bytes)\n\
-\n",
-
+ Length: %i (%i bytes)\n",
         desth->ip6d_nxt,
         ip_protocol_to_name( desth->ip6d_nxt ),
         desth->ip6d_len,
@@ -425,45 +406,77 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type )
     struct ip6_hdr *ip6h;
     size_t s;
     struct ether_header *ethh = (struct ether_header *) packet_data;
-    unsigned short found_type;
-    char *found_header;
+    int found_type = -1;
+    char *found_header = NULL;
+
+    if ( len < SIZEOF_ETHER ) {
+        printf( "Ethernet Frame: \nToo short\n" );
+        return NULL;
+    }
+    print_ethh( ethh );
 
     if ( ntohs( ethh->ether_type ) == ETHERTYPE_IP ) {
         iph = (struct ip *) ( packet_data + SIZEOF_ETHER );
         s = SIZEOF_ETHER + ( iph->ip_hl * 4 );
-        if ( s > len ) errx( 1, "Packet too short (IPv4)" );
+        if ( s > len ) {
+            printf( "IPv4 Header:\n Too short\n" );
+            return NULL;
+        }
         print_iph( iph );
-        if ( iph->ip_p == IPPROTO_TCP ) {
-            if ( s + SIZEOF_TCP > len ) errx( 1, "Packet too short" );
+        if ( ( ntohs( iph->ip_off ) & 0x1FFF ) || ntohs( iph->ip_off ) & ( 1 << IP_FLAGS_OFFSET ) ) {
+            printf( "(Fragment)\n" );
+            found_type = -1;
+            found_header = NULL;
+        } else if ( iph->ip_p == IPPROTO_TCP ) {
+            if ( s + SIZEOF_TCP > len ) {
+                printf( "TCP Header:\n Too short\n" );
+                return NULL;
+            }
             print_tcph( (struct tcphdr *) ( packet_data + s ) );
             found_type = IPPROTO_TCP;
             found_header = packet_data + s;
         } else if ( iph->ip_p == IPPROTO_ICMP ) {
-            if ( s + SIZEOF_PING > len ) errx( 1, "Packet too short" );
+            if ( s + SIZEOF_PING > len ) {
+                printf( "UDP Header:\n Too short\n" );
+                return NULL;
+            }
             print_icmph( (struct icmp *) ( packet_data + s ) );
             found_type = IPPROTO_ICMP;
             found_header = packet_data + s;
         } else {
-            errx( 1, "Unknown layer 4 protocol encountered (ip protocol %i)", iph->ip_p );
+            printf( "Unsupported protocol:\n IP Protocol %i (%s)\n", iph->ip_p, ip_protocol_to_name( iph->ip_p ) );
+            return NULL;
         }
 
     } else if ( ntohs( ethh->ether_type ) == ETHERTYPE_IPV6 ) {
         ip6h = (struct ip6_hdr *) ( packet_data + SIZEOF_ETHER );
         s = SIZEOF_ETHER + SIZEOF_IPV6;
-        if ( s > len ) errx( 1, "Packet too short (IPv6)" );
+        if ( s > len ) {
+            printf( "IPv6 Header:\n Too short\n" );
+            return NULL;
+        }
         print_ip6h( ip6h );
         if ( ip6h->ip6_nxt == IPPROTO_TCP ) {
-            if ( s + SIZEOF_TCP > len ) errx( 1, "Packet too short" );
+            if ( s + SIZEOF_TCP > len ) {
+                printf( "TCP Header:\n Too short\n" );
+                return NULL;
+            }
             print_tcph( (struct tcphdr *) ( packet_data + s ) );
             found_type = IPPROTO_TCP;
             found_header = packet_data + s;
         } else if ( ip6h->ip6_nxt == IPPROTO_ICMPV6 ) {
-            if ( s + SIZEOF_ICMP6 > len ) errx( 1, "Packet too short" );
+            if ( s + SIZEOF_ICMP6 > len ) {
+                printf( "ICMP6 Header:\n Too short\n" );
+                return NULL;
+            }
             print_icmp6h( (struct icmp6_hdr *) ( packet_data + s ) );
             found_type = IPPROTO_ICMPV6;
             found_header = packet_data + s;
         } else if ( ip6h->ip6_nxt == IPPROTO_FRAGMENT ) {
-            if ( s + sizeof( struct ip6_frag ) > len ) errx( 1, "Packet too short" );
+            if ( s + sizeof( struct ip6_frag ) > len ) {
+                printf( "Fragment Header:\n Too short\n" );
+                return NULL;
+            }
             print_fragh( (struct ip6_frag *) ( packet_data + s ) );
             found_type = IPPROTO_FRAGMENT;
             found_header = packet_data + s;
@@ -473,22 +486,36 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type )
              * buffer to read the destopts header, then check we have to check
              * again to see if we have the complete header.
              */
-            if ( s + sizeof( struct ip6_dest ) > len ) errx( 1, "Packet too short" );
+            if ( s + sizeof( struct ip6_dest ) > len ) {
+                printf( "Destination Options Header:\n Too short\n" );
+                return NULL;
+            }
             if ( 
                 ( s
                     + sizeof( struct ip6_dest )
                     + ( ( (struct ip6_dest *) packet_data + s )->ip6d_len * 8 )
                 )
-                > len ) errx( 1, "Packet too short" );
+                > len ) {
+                printf( "Destination Options Header:\n Too short (options truncated)\n" );
+                return NULL;
+            }
             print_dstopth( (struct ip6_dest *) ( packet_data + s ) );
             found_type = IPPROTO_DSTOPTS;
             found_header = packet_data + s + ( ( (struct ip6_dest *) packet_data + s )->ip6d_len * 8 );
         } else {
-            errx( 1, "Unknown IPv6 header encountered (ip6 next header %i)", ip6h->ip6_nxt );
+            printf( "Unsupported IPv6 Header:\n Next header: %i (%s)\n",
+                ip6h->ip6_nxt,
+                ip_protocol_to_name( ip6h->ip6_nxt )
+            );
+            return NULL;
         }
 
     } else {
-        errx( 1, "Unknown protocol received (ethertype %i)", ntohs( ethh->ether_type ) );
+        printf( "Unsupported Protocol:\n Ethertype: %i (%s)\n",
+            ntohs( ethh->ether_type ),
+            ether_protocol_to_name( ethh->ether_type )
+        );
+        return NULL;
     }
 
     if ( wanted_type == found_type ) return found_header;
@@ -578,7 +605,7 @@ int check_received_packet( int buf_len, char *packet_buf, enum TEST_TYPE test_ty
     struct icmp *icmph;
     struct icmp6_hdr *icmp6h;
 
-    printf( "Received packet:\n" );
+    printf( "Received packet 1:\n\n" );
 
     if ( IS_TEST_IPV4( test_type ) && IS_TEST_ICMP( test_type ) ) {
         icmph = (struct icmp *) print_a_packet( (char *) received_packet_data, buf_len, IPPROTO_ICMP );
@@ -1232,11 +1259,11 @@ int main( int argc, char **argv )
         return 1;
     }
     if ( check_received_packet( r, packet_buf, test_type ) ) {
-        printf( "Test was successful.\n" );
+        printf( "\nTest was successful.\n" );
         free( packet_buf );
         return 0;
     }
-    fprintf( stderr, "Test failed.\n" );
+    printf( "\nTest failed.\n" );
     free( packet_buf );
     return 1;
 }

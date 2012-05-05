@@ -177,7 +177,7 @@ void *append_ipv4_frag2( struct ip *iph, char *srcip, char *dstip, unsigned char
     iph->ip_id = htons( fragid );
     iph->ip_len = htons( SIZEOF_IPV4 + payload_length );
 
-    return (char *)iph + SIZEOF_IPV4;
+    return (char *) iph + SIZEOF_IPV4;
 }
 
 void *append_ipv4_optioned_frag1( struct ip *iph, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short optlen )
@@ -194,7 +194,7 @@ void *append_ipv4_optioned_frag1( struct ip *iph, char *srcip, char *dstip, unsi
     memset( (char *) iph + SIZEOF_IPV4, 0x01, optlen );
     *( (char *) iph + SIZEOF_IPV4 + optlen ) = 0;
 
-    return (char *)iph + SIZEOF_IPV4 + optlen;
+    return (char *) iph + SIZEOF_IPV4 + optlen;
 }
 
 void *append_ipv6( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short payload_length )
@@ -207,7 +207,34 @@ void *append_ipv6( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char
     if ( !inet_pton( AF_INET6, srcip, &ip6h->ip6_src ) ) errx( 1, "Invalid source address" );
     if ( !inet_pton( AF_INET6, dstip, &ip6h->ip6_dst ) ) errx( 1, "Invalid source address" );
 
-    return (char *)ip6h + SIZEOF_IPV6;
+    return (char *) ip6h + SIZEOF_IPV6;
+}
+
+void *append_ipv6_frag( void *buf, unsigned char protocol, unsigned short offset, unsigned short fragid, int more )
+{
+    struct ip6_frag *fragh = (struct ip6_frag *) buf;
+
+    fragh->ip6f_reserved = 0;
+    fragh->ip6f_nxt = protocol;
+    fragh->ip6f_ident = htons( fragid );
+    fragh->ip6f_offlg = htons( offset << 3 );
+    if ( more ) fragh->ip6f_offlg |= IP6F_MORE_FRAG;
+
+    return (char *) buf + sizeof( struct ip6_frag );
+}
+
+void *append_ipv6_dest( void *buf, unsigned char protocol, unsigned char optlen )
+{
+    struct ip6_dest *desth = (struct ip6_dest *) buf;
+
+    desth->ip6d_nxt = protocol;
+    if ( optlen == 0 || optlen % 8 != 6 ) errx( 1, "optlen value not valid" );
+    desth->ip6d_len = optlen / 8;
+    *( (char *) desth + sizeof( struct ip6_dest ) ) = 1;
+    *( (char *) desth + sizeof( struct ip6_dest ) + 1 ) = optlen - 2;
+    memset( (char *) desth + sizeof( struct ip6_dest ) + 2, 0, optlen - 2 );
+
+    return (char *) buf + sizeof( struct ip6_dest ) + optlen;
 }
 
 void *append_ipv6_short_frag1( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid )

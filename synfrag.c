@@ -234,13 +234,26 @@ unsigned short fix_up_destination_options_length( unsigned short optlen )
 
 void calc_checksum( void *iph, int protocol, int len )
 {
-    if ( do_checksum( iph, protocol, len ) <= 0 ) {
+    if ( do_checksum( iph, protocol, len ) != 1 ) {
         fprintf(
             stderr,
             "Warning: Failed to calculate checksum for protocol %i. This is probably a bug.\n",
             protocol
         );
     }
+}
+
+/*
+ * I know this is undesirable, but I'm not sure I want to keep the structure
+ * of the code this way, and until I do this out of place function definition
+ * will work okay.
+ */
+char *print_a_packet( char *, int, unsigned short );
+void synfrag_send( void *packet, int len )
+{
+    printf( "Sending packet:\n\n" );
+    print_a_packet( packet, len, 0 );
+    if ( pcap_inject( pcap, packet, len ) != len ) errx( 1, "pcap_inject" );
 }
 
 void print_ethh( struct ether_header *ethh )
@@ -368,14 +381,45 @@ void print_tcph( struct tcphdr *tcph )
         ntohs( tcph->th_dport ),
         ntohl( tcph->th_seq ),
         ntohl( tcph->th_ack ),
-        tcph->th_flags,
-        tcp_flags
+        tcph->th_flags, tcp_flags
     );
     free( tcp_flags );
 }
 
+void print_fragh( struct ip6_frag *fragh )
+{
+    printf( "Fragment Header:\n\
+ Next Header: %i (%s)\n\
+ Ident: %i\n\
+ Offlg: 0x%04x\n\
+ Offset: %i (%i bytes)\n\
+ More Frags: %i\n\
+\n",
+
+        fragh->ip6f_nxt, ip_protocol_to_name( fragh->ip6f_nxt ),
+        ntohs( fragh->ip6f_ident ),
+        ntohs( fragh->ip6f_offlg ),
+        ntohs( fragh->ip6f_offlg ) >> 3, ( ntohs( fragh->ip6f_offlg ) >> 3 ) * 8,
+        fragh->ip6f_offlg & IP6F_MORE_FRAG ? 1 : 0
+    );
+}
+
+void print_dstopth( struct ip6_dest *desth )
+{
+    printf( "Destination Options Header:\n\
+ Next Header: %i (%s)\n\
+ Length: %i (%i bytes)\n\
+\n",
+
+        desth->ip6d_nxt,
+        ip_protocol_to_name( desth->ip6d_nxt ),
+        desth->ip6d_len,
+        desth->ip6d_len * 8
+    );
+}
+
 /* Returns the layer 4 header if we found one. */
-char *print_a_packet( int len, char *packet_data, unsigned short wanted_type )
+char *print_a_packet( char *packet_data, int len, unsigned short wanted_type )
 {
     struct ip *iph;
     struct ip6_hdr *ip6h;
@@ -387,43 +431,64 @@ char *print_a_packet( int len, char *packet_data, unsigned short wanted_type )
     if ( ntohs( ethh->ether_type ) == ETHERTYPE_IP ) {
         iph = (struct ip *) ( packet_data + SIZEOF_ETHER );
         s = SIZEOF_ETHER + ( iph->ip_hl * 4 );
-        if ( s > len ) errx( 1, "Reply too short (IPv4)" );
+        if ( s > len ) errx( 1, "Packet too short (IPv4)" );
         print_iph( iph );
         if ( iph->ip_p == IPPROTO_TCP ) {
-            if ( s + SIZEOF_TCP > len ) errx( 1, "Reply too short" );
+            if ( s + SIZEOF_TCP > len ) errx( 1, "Packet too short" );
             print_tcph( (struct tcphdr *) ( packet_data + s ) );
             found_type = IPPROTO_TCP;
             found_header = packet_data + s;
         } else if ( iph->ip_p == IPPROTO_ICMP ) {
-            if ( s + SIZEOF_PING > len ) errx( 1, "Reply too short" );
+            if ( s + SIZEOF_PING > len ) errx( 1, "Packet too short" );
             print_icmph( (struct icmp *) ( packet_data + s ) );
             found_type = IPPROTO_ICMP;
             found_header = packet_data + s;
         } else {
-            errx( 1, "Unknown reply received (ip protocol %i)", iph->ip_p );
+            errx( 1, "Unknown layer 4 protocol encountered (ip protocol %i)", iph->ip_p );
         }
 
     } else if ( ntohs( ethh->ether_type ) == ETHERTYPE_IPV6 ) {
         ip6h = (struct ip6_hdr *) ( packet_data + SIZEOF_ETHER );
         s = SIZEOF_ETHER + SIZEOF_IPV6;
-        if ( s > len ) errx( 1, "Reply too short (IPv6)" );
+        if ( s > len ) errx( 1, "Packet too short (IPv6)" );
         print_ip6h( ip6h );
         if ( ip6h->ip6_nxt == IPPROTO_TCP ) {
-            if ( s + SIZEOF_TCP > len ) errx( 1, "Reply too short" );
+            if ( s + SIZEOF_TCP > len ) errx( 1, "Packet too short" );
             print_tcph( (struct tcphdr *) ( packet_data + s ) );
             found_type = IPPROTO_TCP;
             found_header = packet_data + s;
         } else if ( ip6h->ip6_nxt == IPPROTO_ICMPV6 ) {
-            if ( s + SIZEOF_ICMP6 > len ) errx( 1, "Reply too short" );
+            if ( s + SIZEOF_ICMP6 > len ) errx( 1, "Packet too short" );
             print_icmp6h( (struct icmp6_hdr *) ( packet_data + s ) );
             found_type = IPPROTO_ICMPV6;
             found_header = packet_data + s;
+        } else if ( ip6h->ip6_nxt == IPPROTO_FRAGMENT ) {
+            if ( s + sizeof( struct ip6_frag ) > len ) errx( 1, "Packet too short" );
+            print_fragh( (struct ip6_frag *) ( packet_data + s ) );
+            found_type = IPPROTO_FRAGMENT;
+            found_header = packet_data + s;
+        } else if ( ip6h->ip6_nxt == IPPROTO_DSTOPTS ) {
+            /*
+             * Wow, this is ugly! First check if we have enough room in the
+             * buffer to read the destopts header, then check we have to check
+             * again to see if we have the complete header.
+             */
+            if ( s + sizeof( struct ip6_dest ) > len ) errx( 1, "Packet too short" );
+            if ( 
+                ( s
+                    + sizeof( struct ip6_dest )
+                    + ( ( (struct ip6_dest *) packet_data + s )->ip6d_len * 8 )
+                )
+                > len ) errx( 1, "Packet too short" );
+            print_dstopth( (struct ip6_dest *) ( packet_data + s ) );
+            found_type = IPPROTO_DSTOPTS;
+            found_header = packet_data + s + ( ( (struct ip6_dest *) packet_data + s )->ip6d_len * 8 );
         } else {
-            errx( 1, "Unknown reply received (ip6 next header %i)", ip6h->ip6_nxt );
+            errx( 1, "Unknown IPv6 header encountered (ip6 next header %i)", ip6h->ip6_nxt );
         }
 
     } else {
-        errx( 1, "Unknown reply received (ethertype %i)", ntohs( ethh->ether_type ) );
+        errx( 1, "Unknown protocol received (ethertype %i)", ntohs( ethh->ether_type ) );
     }
 
     if ( wanted_type == found_type ) return found_header;
@@ -513,16 +578,18 @@ int check_received_packet( int buf_len, char *packet_buf, enum TEST_TYPE test_ty
     struct icmp *icmph;
     struct icmp6_hdr *icmp6h;
 
+    printf( "Received packet:\n" );
+
     if ( IS_TEST_IPV4( test_type ) && IS_TEST_ICMP( test_type ) ) {
-        icmph = (struct icmp *) print_a_packet( buf_len, (char *) received_packet_data, IPPROTO_ICMP );
+        icmph = (struct icmp *) print_a_packet( (char *) received_packet_data, buf_len, IPPROTO_ICMP );
         if ( !icmph ) return 0;
         if ( icmph->icmp_type == ICMP_ECHOREPLY && icmph->icmp_id == htons( SOURCE_PORT ) ) return 1;
     } else if ( IS_TEST_IPV6( test_type ) && IS_TEST_ICMP( test_type ) ) {
-        icmp6h = (struct icmp6_hdr *) print_a_packet( buf_len, (char *) received_packet_data, IPPROTO_ICMPV6 );
+        icmp6h = (struct icmp6_hdr *) print_a_packet( (char *) received_packet_data, buf_len, IPPROTO_ICMPV6 );
         if ( !icmp6h ) return 0;
         if ( icmp6h->icmp6_type == ICMP6_ECHO_REPLY && icmp6h->icmp6_id == htons( SOURCE_PORT ) ) return 1;
     } else { /* Assume pcap picked the right address family for our packet. */
-        tcph = (struct tcphdr *) print_a_packet( buf_len, (char *) received_packet_data, IPPROTO_TCP );
+        tcph = (struct tcphdr *) print_a_packet( (char *) received_packet_data, buf_len, IPPROTO_TCP );
         if ( !tcph ) return 0;
         if ( ( tcph->th_flags & ( TH_SYN|TH_ACK ) ) && !( tcph->th_flags & TH_RST ) ) {
             return 1;
@@ -552,7 +619,7 @@ void do_ipv4_syn( char *interface, char *srcip, char *dstip, char *srcmac, char 
     calc_checksum( iph, IPPROTO_TCP, SIZEOF_TCP );
     calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
     free( ethh );
 }
 
@@ -576,7 +643,7 @@ void do_ipv4_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, 
     calc_checksum( iph, IPPROTO_TCP, SIZEOF_TCP );
     calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
 
     packet_size = SIZEOF_ETHER + SIZEOF_IPV4 + SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE;
 
@@ -584,7 +651,7 @@ void do_ipv4_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, 
     memmove( tcph, (char *) tcph + MINIMUM_FRAGMENT_SIZE, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
     calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
     free( ethh );
 }
 
@@ -609,7 +676,7 @@ void do_ipv4_frag_icmp( char *interface, char *srcip, char *dstip, char *srcmac,
     calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 );
     calc_checksum( iph, IPPROTO_ICMP, SIZEOF_PING + pinglen );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
 
     packet_size = SIZEOF_ETHER + SIZEOF_IPV4 + SIZEOF_PING + pinglen - MINIMUM_FRAGMENT_SIZE;
 
@@ -617,7 +684,7 @@ void do_ipv4_frag_icmp( char *interface, char *srcip, char *dstip, char *srcmac,
     memmove( icmph, (char *) icmph + MINIMUM_FRAGMENT_SIZE, SIZEOF_PING + pinglen - MINIMUM_FRAGMENT_SIZE );
     calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
     free( ethh );
 }
 
@@ -643,7 +710,7 @@ void do_ipv4_options_tcp_frag( char *interface, char *srcip, char *dstip, char *
     calc_checksum( iph, IPPROTO_TCP, SIZEOF_TCP );
     calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 + optlen );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
 
     packet_size = SIZEOF_ETHER + SIZEOF_IPV4 + SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE;
 
@@ -651,7 +718,7 @@ void do_ipv4_options_tcp_frag( char *interface, char *srcip, char *dstip, char *
     memmove( tcph, (char *) tcph_optioned + MINIMUM_FRAGMENT_SIZE, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
     calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
     free( ethh );
 }
 
@@ -678,7 +745,7 @@ void do_ipv4_options_icmp_frag( char *interface, char *srcip, char *dstip, char 
     calc_checksum( iph, IPPROTO_ICMP, SIZEOF_PING + pinglen );
     calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 + optlen );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
 
     packet_size = SIZEOF_ETHER + SIZEOF_IPV4 + SIZEOF_PING + pinglen;
 
@@ -686,7 +753,7 @@ void do_ipv4_options_icmp_frag( char *interface, char *srcip, char *dstip, char 
     memmove( icmph, (char *) icmph_optioned + MINIMUM_FRAGMENT_SIZE, SIZEOF_PING + pinglen - MINIMUM_FRAGMENT_SIZE );
     calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
     free( ethh );
 }
 
@@ -709,7 +776,7 @@ void do_ipv6_syn( char *interface, char *srcip, char *dstip, char *srcmac, char 
     append_tcp_syn( ip6h, tcph, SOURCE_PORT, dstport );
     calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
     free( ethh );
 }
 
@@ -732,14 +799,14 @@ void do_ipv6_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, 
     append_tcp_syn( ip6h, tcph, SOURCE_PORT, dstport );
     calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
 
     packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + sizeof( struct ip6_frag ) + SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE;
 
     append_ipv6_frag2( ip6h, srcip, dstip, IPPROTO_TCP, fragid, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
     memmove( tcph, (char *) tcph + MINIMUM_FRAGMENT_SIZE, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
     free( ethh );
 }
 
@@ -763,14 +830,14 @@ void do_ipv6_frag_icmp( char *interface, char *srcip, char *dstip, char *srcmac,
     append_icmp6_ping( ip6h, icmp6h, pinglen );
     calc_checksum( ip6h, IPPROTO_ICMPV6, SIZEOF_ICMP6 + pinglen );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
 
     packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + sizeof( struct ip6_frag ) + SIZEOF_ICMP6 + pinglen - MINIMUM_FRAGMENT_SIZE;
 
     append_ipv6_frag2( ip6h, srcip, dstip, IPPROTO_ICMPV6, fragid, SIZEOF_ICMP6 + pinglen - MINIMUM_FRAGMENT_SIZE );
     memmove( icmp6h, (char *) icmp6h + MINIMUM_FRAGMENT_SIZE, SIZEOF_ICMP6 + pinglen - MINIMUM_FRAGMENT_SIZE );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
     free( ethh );
 }
 
@@ -802,14 +869,14 @@ void do_ipv6_dstopt_frag_icmp( char *interface, char *srcip, char *dstip, char *
     append_icmp6_ping( ip6h, icmp6h_optioned, pinglen );
     calc_checksum( ip6h, IPPROTO_ICMPV6, SIZEOF_ICMP6 + pinglen );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
 
     packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + sizeof( struct ip6_frag ) + SIZEOF_PING + pinglen - MINIMUM_FRAGMENT_SIZE;
 
     append_ipv6_frag2( ip6h, srcip, dstip, IPPROTO_ICMPV6, fragid, SIZEOF_ICMP6 + pinglen - MINIMUM_FRAGMENT_SIZE );
     memmove( icmp6h, (char *) icmp6h_optioned + MINIMUM_FRAGMENT_SIZE, SIZEOF_ICMP6 + pinglen - MINIMUM_FRAGMENT_SIZE );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
     free( ethh );
 }
 
@@ -836,14 +903,14 @@ void do_ipv6_dstopt_frag_tcp( char *interface, char *srcip, char *dstip, char *s
     append_tcp_syn( ip6h, tcph_optioned, SOURCE_PORT, dstport );
     calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
 
     packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + sizeof( struct ip6_frag ) + SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE;
 
     append_ipv6_frag2( ip6h, srcip, dstip, IPPROTO_TCP, fragid, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
     memmove( tcph, (char *) tcph_optioned + MINIMUM_FRAGMENT_SIZE, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
     free( ethh );
 }
 
@@ -870,14 +937,14 @@ void do_ipv6_frag_dstopt_tcp( char *interface, char *srcip, char *dstip, char *s
     append_tcp_syn( ip6h, tcph_optioned, SOURCE_PORT, dstport );
     calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
 
     packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + sizeof( struct ip6_frag ) + SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE;
 
-    append_ipv6_2frag2( ip6h, srcip, dstip, IPPROTO_TCP, fragid, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE, optlen );
+    append_ipv6_frag2_offset( ip6h, srcip, dstip, IPPROTO_TCP, fragid, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE, optlen );
     memmove( tcph, (char *) tcph_optioned + MINIMUM_FRAGMENT_SIZE, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
 
-    if ( pcap_inject( pcap, ethh, packet_size ) != packet_size ) errx( 1, "pcap_inject" );
+    synfrag_send( ethh, packet_size );
     free( ethh );
 }
 

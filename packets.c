@@ -54,6 +54,7 @@
 #include <netinet/if_ether.h>
 #include "checksums.h"
 #include "constants.h"
+#include "packets.h"
 
 #define IP_FLAGS_OFFSET 13
 #define SOURCE_PORT 44128
@@ -289,25 +290,10 @@ void *append_ipv6_optioned2_frag1( struct ip6_hdr *ip6h, char *srcip, char *dsti
 
 void *append_ipv6_frag2( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short payload_length )
 {
-    struct ip6_frag *fragh = (struct ip6_frag *) ( (char *)ip6h + SIZEOF_IPV6 );
-
-    /* 4 bits version, 8 bits TC, 20 bits flow-ID. We only set the version bits. */
-    ip6h->ip6_flow = htonl( 0x06 << 28 );
-    ip6h->ip6_plen = htons( payload_length + sizeof( struct ip6_frag ) );
-    ip6h->ip6_hlim = 64;
-    ip6h->ip6_nxt = IPPROTO_FRAGMENT;
-    if ( !inet_pton( AF_INET6, srcip, &ip6h->ip6_src ) ) errx( 1, "Invalid source address" );
-    if ( !inet_pton( AF_INET6, dstip, &ip6h->ip6_dst ) ) errx( 1, "Invalid source address" );
-
-    fragh->ip6f_reserved = 0;
-    fragh->ip6f_nxt = protocol;
-    fragh->ip6f_ident = htons( fragid );
-    fragh->ip6f_offlg = htons( 1 << 3 );
-
-    return (char *)ip6h + SIZEOF_IPV6 + sizeof( struct ip6_frag );
+    return append_ipv6_frag2_offset( ip6h, srcip, dstip, protocol, fragid, payload_length, 8 );
 }
 
-void *append_ipv6_2frag2( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short payload_length, unsigned short optlen )
+void *append_ipv6_frag2_offset( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid, unsigned short payload_length, unsigned short optlen )
 {
     struct ip6_frag *fragh = (struct ip6_frag *) ( (char *)ip6h + SIZEOF_IPV6 );
     unsigned short offset = optlen + sizeof( struct ip6_dest ) + MINIMUM_FRAGMENT_SIZE;

@@ -73,7 +73,7 @@
 /* This size is fixed but extends past the standard basic icmp header. */
 #define SIZEOF_PING 8
 
-void build_ethernet( struct ether_header *ethh, char *srcmac, char *dstmac, short int ethertype )
+void *append_ethernet( struct ether_header *ethh, char *srcmac, char *dstmac, short int ethertype )
 {
     if ( sscanf( srcmac, "%2hhx:%2hhx:%2hhx:%2hhx:%2hhx:%2hhx",
             &ethh->ether_shost[0],
@@ -96,6 +96,7 @@ void build_ethernet( struct ether_header *ethh, char *srcmac, char *dstmac, shor
     }
 
     ethh->ether_type = htons( ethertype );
+    return (char *) ethh + SIZEOF_ETHER;
 }
 
 void *append_tcp_syn( void *iph, struct tcphdr *tcph, unsigned short srcport, unsigned short dstport )
@@ -210,7 +211,7 @@ void *append_ipv6( struct ip6_hdr *ip6h, char *srcip, char *dstip, unsigned char
     return (char *) ip6h + SIZEOF_IPV6;
 }
 
-void *append_ipv6_frag( void *buf, unsigned char protocol, unsigned short offset, unsigned short fragid, int more )
+void *append_frag( void *buf, unsigned char protocol, unsigned short offset, unsigned short fragid, int more )
 {
     struct ip6_frag *fragh = (struct ip6_frag *) buf;
 
@@ -223,7 +224,7 @@ void *append_ipv6_frag( void *buf, unsigned char protocol, unsigned short offset
     return (char *) buf + sizeof( struct ip6_frag );
 }
 
-void *append_ipv6_dest( void *buf, unsigned char protocol, unsigned char optlen )
+void *append_dest( void *buf, unsigned char protocol, unsigned char optlen )
 {
     struct ip6_dest *desth = (struct ip6_dest *) buf;
 

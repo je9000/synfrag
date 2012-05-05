@@ -25,7 +25,7 @@
  * Author: John Eaglesham
  */
 
-void build_ethernet( struct ether_header *, char *, char *, short int );
+void *append_ethernet( struct ether_header *, char *, char *, short int );
 void *append_tcp_syn( void *, struct tcphdr *, unsigned short, unsigned short );
 void *append_icmp_ping( void *, struct icmp *, unsigned short );
 void *append_icmp6_ping( void *, struct icmp6_hdr *, unsigned short );
@@ -41,5 +41,8 @@ void *append_ipv6_optioned2_frag1( struct ip6_hdr *, char *, char *, unsigned ch
 void *append_ipv6_frag2( struct ip6_hdr *, char *, char *, unsigned char, unsigned short, unsigned short );
 void *append_ipv6_frag2_offset( struct ip6_hdr *, char *, char *, unsigned char, unsigned short, unsigned short, unsigned short );
 
-#define append_ipv6_frag_first( buf, proto, fragid ) append_ipv6_frag( buf, proto, 0, fragid, 1 )
-#define append_ipv6_frag_last( buf, proto, offset, fragid ) append_ipv6_frag( buf, proto, offset, fragid, 0 )
+void *append_frag( void *, unsigned char, unsigned short, unsigned short, int );
+void *append_dest( void *, unsigned char, unsigned char );
+
+#define append_frag_first( buf, proto, fragid ) append_frag( buf, proto, 0, fragid, 1 )
+#define append_frag_last( buf, proto, offset, fragid ) append_frag( buf, proto, offset, fragid, 0 )

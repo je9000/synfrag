@@ -258,7 +258,7 @@ void synfrag_send( void *packet, int len )
     printf( "Sending packet %u:\n\n", packets_sent++ );
     print_a_packet( packet, len, 0 );
     putchar( '\n' );
-    if ( pcap_inject( pcap, packet, len ) != len ) errx( 1, "pcap_inject" );
+    if ( pcap_inject( pcap, packet, len ) != len ) errx( 1, "pcap_inject failed: %s", pcap_geterr( pcap ) );
 }
 
 void print_ethh( struct ether_header *ethh )
@@ -669,7 +669,7 @@ void do_ipv4_syn( char *interface, char *srcip, char *dstip, char *srcmac, char 
 
     packet_size = SIZEOF_ETHER + SIZEOF_TCP + SIZEOF_IPV4;
 
-    ethh = (struct ether_header *) malloc_check( packet_size );
+    ethh = (struct ether_header *) malloc_check( BIG_PACKET_SIZE );
     iph = (struct ip *) ( (char *) ethh + SIZEOF_ETHER );
     tcph = (struct tcphdr *) ( (char *) iph + SIZEOF_IPV4 );
 
@@ -827,7 +827,7 @@ void do_ipv6_syn( char *interface, char *srcip, char *dstip, char *srcmac, char 
 
     packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + SIZEOF_TCP;
 
-    ethh = (struct ether_header *) malloc_check( packet_size );
+    ethh = (struct ether_header *) malloc_check( BIG_PACKET_SIZE );
     ip6h = (struct ip6_hdr *) ( (char *) ethh + SIZEOF_ETHER );
     tcph = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 );
 
@@ -1155,7 +1155,7 @@ void exit_with_usage( void )
 
 void copy_arg_string( char **dst, char *opt )
 {
-    *dst = malloc( strlen( opt ) );
+    *dst = malloc_check( strlen( opt ) );
     memcpy( *dst, opt, strlen( opt) );
 }
 

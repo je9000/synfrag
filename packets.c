@@ -248,7 +248,7 @@ void *append_dest( void *buf, unsigned char protocol, unsigned char optlen )
     struct ip6_dest *desth = (struct ip6_dest *) buf;
 
     desth->ip6d_nxt = protocol;
-    if ( optlen == 0 || optlen % 8 != 6 ) errx( 1, "optlen value not valid" );
+    if ( optlen % 8 != 6 ) errx( 1, "optlen value not valid" );
     desth->ip6d_len = optlen / 8;
     *( (char *) desth + sizeof( struct ip6_dest ) ) = 1;
     *( (char *) desth + sizeof( struct ip6_dest ) + 1 ) = optlen - 2;

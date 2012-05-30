@@ -48,6 +48,7 @@
 #define SIZEOF_IPV6 sizeof( struct ip6_hdr )
 #define SIZEOF_ETHER sizeof( struct ether_header )
 #define SIZEOF_FRAG sizeof( struct ip6_frag )
+/* SIZEOF_DESTOPT be < 8 as per RFC2460 */
 #define SIZEOF_DESTOPT sizeof( struct ip6_dest )
 /* This size is fixed but extends past the standard basic icmp header. */
 #define SIZEOF_PING 8

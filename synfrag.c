@@ -378,12 +378,12 @@ void print_fragh( struct ip6_frag *fragh )
  Ident: %i\n\
  Offlg: 0x%04x\n\
  Offset: %i (%i bytes)\n\
- More Frags: %i\n",
+ More Frags: %s\n",
         fragh->ip6f_nxt, ip_protocol_to_name( fragh->ip6f_nxt ),
         ntohs( fragh->ip6f_ident ),
         ntohs( fragh->ip6f_offlg ),
         ntohs( fragh->ip6f_offlg ) >> 3, ( ntohs( fragh->ip6f_offlg ) >> 3 ) * 8,
-        fragh->ip6f_offlg & IP6F_MORE_FRAG ? 1 : 0
+        fragh->ip6f_offlg & IP6F_MORE_FRAG ? "Yes" : "No"
     );
 }
 
@@ -391,11 +391,13 @@ void print_dstopth( struct ip6_dest *desth )
 {
     printf( "Destination Options Header:\n\
  Next Header: %i (%s)\n\
- Length: %i (%i bytes)\n",
+ Header Length: %i (%i bytes)\n\
+ Options Length: %i bytes\n",
         desth->ip6d_nxt,
         ip_protocol_to_name( desth->ip6d_nxt ),
         desth->ip6d_len,
-        desth->ip6d_len * 8
+        8 + ( desth->ip6d_len * 8 ),
+        8 - 2 + ( desth->ip6d_len * 8 )
     );
 }
 
@@ -404,7 +406,7 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type )
 {
     struct ip *iph;
     struct ip6_hdr *ip6h;
-    size_t s;
+    size_t s = SIZEOF_ETHER;
     struct ether_header *ethh = (struct ether_header *) packet_data;
     int found_type = -1;
     char *found_header = NULL;
@@ -417,7 +419,7 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type )
 
     if ( ntohs( ethh->ether_type ) == ETHERTYPE_IP ) {
         iph = (struct ip *) ( packet_data + SIZEOF_ETHER );
-        s = SIZEOF_ETHER + ( iph->ip_hl * 4 );
+        s += ( iph->ip_hl * 4 );
         if ( s > len ) {
             printf( "IPv4 Header:\n Too short\n" );
             return NULL;
@@ -449,68 +451,96 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type )
         }
 
     } else if ( ntohs( ethh->ether_type ) == ETHERTYPE_IPV6 ) {
-        ip6h = (struct ip6_hdr *) ( packet_data + SIZEOF_ETHER );
-        s = SIZEOF_ETHER + SIZEOF_IPV6;
-        if ( s > len ) {
-            printf( "IPv6 Header:\n Too short\n" );
-            return NULL;
-        }
-        print_ip6h( ip6h );
-        if ( ip6h->ip6_nxt == IPPROTO_TCP ) {
-            if ( s + SIZEOF_TCP > len ) {
-                printf( "TCP Header:\n Too short\n" );
+        int ipv6_next_header_type = IPPROTO_IPV6;
+        int depth = 0;
+
+        while( 1 ) {
+            if ( depth >= 20 ) {
+                printf( "Too many headers, stopping parsing after %i.\n", depth );
                 return NULL;
             }
-            print_tcph( (struct tcphdr *) ( packet_data + s ) );
-            found_type = IPPROTO_TCP;
-            found_header = packet_data + s;
-        } else if ( ip6h->ip6_nxt == IPPROTO_ICMPV6 ) {
-            if ( s + SIZEOF_ICMP6 > len ) {
-                printf( "ICMP6 Header:\n Too short\n" );
+            if ( ipv6_next_header_type == IPPROTO_IPV6 ) {
+                ip6h = (struct ip6_hdr *) ( packet_data + SIZEOF_ETHER );
+                s += SIZEOF_IPV6;
+                if ( s > len ) {
+                    printf( "IPv6 Header:\n Too short\n" );
+                    return NULL;
+                }
+                print_ip6h( ip6h );
+                ipv6_next_header_type = ip6h->ip6_nxt;
+            } else if ( ipv6_next_header_type == IPPROTO_TCP ) {
+                if ( s + SIZEOF_TCP > len ) {
+                    printf( "TCP Header:\n Too short\n" );
+                    return NULL;
+                }
+                print_tcph( (struct tcphdr *) ( packet_data + s ) );
+                found_type = IPPROTO_TCP;
+                found_header = packet_data + s;
+                s += SIZEOF_TCP;
+                break;
+            } else if ( ipv6_next_header_type == IPPROTO_ICMPV6 ) {
+                if ( s + SIZEOF_ICMP6 > len ) {
+                    printf( "ICMP6 Header:\n Too short\n" );
+                    return NULL;
+                }
+                print_icmp6h( (struct icmp6_hdr *) ( packet_data + s ) );
+                found_type = IPPROTO_ICMPV6;
+                found_header = packet_data + s;
+                s += SIZEOF_ICMP6;
+                break;
+            } else if ( ipv6_next_header_type == IPPROTO_FRAGMENT ) {
+                if ( s + SIZEOF_FRAG > len ) {
+                    printf( "Fragment Header:\n Too short\n" );
+                    return NULL;
+                }
+                print_fragh( (struct ip6_frag *) ( packet_data + s ) );
+                found_type = IPPROTO_FRAGMENT;
+                found_header = packet_data + s;
+                if ( ntohs( ( (struct ip6_frag *) ( packet_data + s ) )->ip6f_offlg ) >> 3 > 0 ) {
+                    printf( "[ Not parsing data fragment. ]\n" );
+                    break;
+                }
+                ipv6_next_header_type = ( (struct ip6_frag *) ( packet_data + s ) )->ip6f_nxt;
+                s += SIZEOF_FRAG;
+            } else if ( ipv6_next_header_type == IPPROTO_DSTOPTS ) {
+                /*
+                 * Wow, this is ugly! First check if we have enough room in the
+                 * buffer to read the destopts header, then check we have to check
+                 * again to see if we have the complete header.
+                 */
+                if ( s + SIZEOF_DESTOPT > len ) {
+                    printf( "Destination Options Header:\n Too short\n" );
+                    return NULL;
+                }
+                if ( 
+                    (
+                        s
+                        + 8 /*
+                             * The Destination Options header length field is
+                             * the total header length in 8 byte octets + 
+                             * another 8 bytes. See RFC 2460.
+                             */
+                        + ( ( (struct ip6_dest *) ( packet_data + s ) )->ip6d_len * 8 )
+                    )
+                    > len ) {
+                    printf( "Destination Options Header:\n Too short (options truncated)\n" );
+                    return NULL;
+                }
+                print_dstopth( (struct ip6_dest *) ( packet_data + s ) );
+                found_type = IPPROTO_DSTOPTS;
+                found_header = packet_data + s;
+                ipv6_next_header_type = ( (struct ip6_dest *) ( packet_data + s ) )->ip6d_nxt;
+                s += 8 + ( ( (struct ip6_dest *) ( packet_data + s ) )->ip6d_len * 8 );
+            } else {
+                printf( "Unsupported IPv6 Header:\n Next header: %i (%s)\n",
+                    ipv6_next_header_type,
+                    ip_protocol_to_name( ipv6_next_header_type )
+                );
                 return NULL;
             }
-            print_icmp6h( (struct icmp6_hdr *) ( packet_data + s ) );
-            found_type = IPPROTO_ICMPV6;
-            found_header = packet_data + s;
-        } else if ( ip6h->ip6_nxt == IPPROTO_FRAGMENT ) {
-            if ( s + SIZEOF_FRAG > len ) {
-                printf( "Fragment Header:\n Too short\n" );
-                return NULL;
-            }
-            print_fragh( (struct ip6_frag *) ( packet_data + s ) );
-            found_type = IPPROTO_FRAGMENT;
-            found_header = packet_data + s;
-        } else if ( ip6h->ip6_nxt == IPPROTO_DSTOPTS ) {
-            /*
-             * Wow, this is ugly! First check if we have enough room in the
-             * buffer to read the destopts header, then check we have to check
-             * again to see if we have the complete header.
-             */
-            if ( s + SIZEOF_DESTOPT > len ) {
-                printf( "Destination Options Header:\n Too short\n" );
-                return NULL;
-            }
-            if ( 
-                ( s
-                    + SIZEOF_DESTOPT
-                    + ( ( (struct ip6_dest *) packet_data + s )->ip6d_len * 8 )
-                )
-                > len ) {
-                printf( "Destination Options Header:\n Too short (options truncated)\n" );
-                return NULL;
-            }
-            print_dstopth( (struct ip6_dest *) ( packet_data + s ) );
-            found_type = IPPROTO_DSTOPTS;
-            found_header = packet_data + s + ( ( (struct ip6_dest *) packet_data + s )->ip6d_len * 8 );
-        } else {
-            printf( "Unsupported IPv6 Header:\n Next header: %i (%s)\n",
-                ip6h->ip6_nxt,
-                ip_protocol_to_name( ip6h->ip6_nxt )
-            );
-            return NULL;
         }
 
-    } else {
+    } else { /* ETHERTYPE_IPV6 */
         printf( "Unsupported Protocol:\n Ethertype: %i (%s)\n",
             ntohs( ethh->ether_type ),
             ether_protocol_to_name( ethh->ether_type )
@@ -948,7 +978,7 @@ void do_ipv6_dstopt_frag_tcp( char *interface, char *srcip, char *dstip, char *s
     packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + SIZEOF_FRAG + SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE;
 
     next = append_ipv6( ip6h, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
-    next = append_frag_last( next, IPPROTO_ICMPV6, MINIMUM_FRAGMENT_SIZE, fragid );
+    next = append_frag_last( next, IPPROTO_TCP, MINIMUM_FRAGMENT_SIZE, fragid );
     memmove( tcph, (char *) tcph_optioned + MINIMUM_FRAGMENT_SIZE, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
 
     synfrag_send( ethh, packet_size );
@@ -962,32 +992,36 @@ void do_ipv6_frag_dstopt_tcp( char *interface, char *srcip, char *dstip, char *s
     struct ether_header *ethh;
     void *next;
     int packet_size;
+    /*
+     * Arbitrarily chosen amount of destination options padding to "overvlow"
+     * the first packet.
+     */
+    const int DSTOPT_OVERFLOW = 8;
     unsigned short fragid = rand();
     unsigned short optlen = fix_up_destination_options_length(
-        MINIMUM_PACKET_SIZE - SIZEOF_IPV6 - SIZEOF_DESTOPT - SIZEOF_FRAG - MINIMUM_FRAGMENT_SIZE
+        MINIMUM_PACKET_SIZE - SIZEOF_IPV6 - SIZEOF_DESTOPT - SIZEOF_FRAG + DSTOPT_OVERFLOW
     );
 
-    packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + SIZEOF_DESTOPT + optlen + SIZEOF_FRAG + MINIMUM_FRAGMENT_SIZE;
+    packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + SIZEOF_FRAG + SIZEOF_DESTOPT + optlen - DSTOPT_OVERFLOW;
 
     ethh = (struct ether_header *) malloc_check( BIG_PACKET_SIZE );
     ip6h = (struct ip6_hdr *) ( (char *) ethh + SIZEOF_ETHER );
-    tcph = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + SIZEOF_FRAG );
-    tcph_optioned = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + SIZEOF_DESTOPT + optlen + SIZEOF_FRAG );
+    tcph = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + SIZEOF_FRAG + DSTOPT_OVERFLOW );
 
     next = append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
-    next = append_ipv6( next, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_DESTOPT + optlen + MINIMUM_FRAGMENT_SIZE );
+    next = append_ipv6( next, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_DESTOPT + optlen - DSTOPT_OVERFLOW );
     next = append_frag_first( next, IPPROTO_DSTOPTS, fragid );
-    next = append_dest( next, IPPROTO_TCP, optlen );
+    tcph_optioned = append_dest( next, IPPROTO_TCP, optlen );
     append_tcp_syn( tcph_optioned, SOURCE_PORT, dstport );
     calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
     synfrag_send( ethh, packet_size );
 
-    packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + SIZEOF_FRAG + SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE;
+    packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + SIZEOF_FRAG + SIZEOF_TCP + DSTOPT_OVERFLOW;
 
-    next = append_ipv6( ip6h, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
-    next = append_frag_last( next, IPPROTO_TCP, SIZEOF_DESTOPT + optlen + MINIMUM_FRAGMENT_SIZE, fragid );
-    memmove( tcph, (char *) tcph_optioned + MINIMUM_FRAGMENT_SIZE, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
+    next = append_ipv6( ip6h, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_TCP + DSTOPT_OVERFLOW );
+    next = append_frag_last( next, IPPROTO_DSTOPTS, SIZEOF_DESTOPT + optlen - DSTOPT_OVERFLOW, fragid );
+    memmove( tcph, (char *) tcph_optioned, SIZEOF_TCP );
 
     synfrag_send( ethh, packet_size );
     free( ethh );

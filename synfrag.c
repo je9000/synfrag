@@ -95,6 +95,7 @@ enum TEST_TYPE {
     TEST_IPV6_DSTOPT_FRAG_TCP = 15,
     TEST_IPV6_FRAG_DSTOPT_TCP = 17,
     TEST_IPV6_FRAG_FRAG_TCP = 19,
+    TEST_IPV6_FRAG_NOMORE_TCP = 21,
 
     TEST_IPV6_FRAG_ICMP6 = 12,
     TEST_IPV6_DSTOPT_FRAG_ICMP6 = 14,
@@ -119,6 +120,7 @@ enum TEST_TYPE test_indexes[] = {
     TEST_IPV6_DSTOPT_FRAG_TCP,
     TEST_IPV6_FRAG_DSTOPT_TCP,
     TEST_IPV6_FRAG_FRAG_TCP,
+    TEST_IPV6_FRAG_NOMORE_TCP,
     TEST_IPV6_DSTOPT_FRAG_ICMP6,
 
     0
@@ -137,6 +139,7 @@ char *test_names[] = {
     "v6-dstopt-frag-tcp",
     "v6-frag-dstopt-tcp",
     "v6-frag-frag-tcp",
+    "v6-frag-nomore-tcp",
     "v6-dstopt-frag-icmp6",
 
     NULL
@@ -1066,6 +1069,31 @@ void do_ipv6_frag_frag_tcp( char *interface, char *srcip, char *dstip, char *src
     free( ethh );
 }
 
+void do_ipv6_frag_nomore_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short dstport )
+{
+    struct ip6_hdr *ip6h;
+    struct tcphdr *tcph;
+    struct ether_header *ethh;
+    int packet_size;
+    unsigned short fragid = rand();
+    void *next;
+
+    packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + SIZEOF_FRAG + SIZEOF_TCP;
+
+    ethh = (struct ether_header *) malloc_check( BIG_PACKET_SIZE );
+    ip6h = (struct ip6_hdr *) ( (char *) ethh + SIZEOF_ETHER );
+    tcph = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + SIZEOF_FRAG );
+
+    next = append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
+    next = append_ipv6( next, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_TCP );
+    next = append_frag_last( next, IPPROTO_TCP, 0, fragid );
+    append_tcp_syn( next, SOURCE_PORT, dstport );
+    calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
+
+    synfrag_send( ethh, packet_size );
+    free( ethh );
+}
+
 
 /* Process functions. */
 void fork_pcap_listener( char *dstip, char *srcip, unsigned short dstport, unsigned short srcport, enum TEST_TYPE test_type, long receive_timeout )
@@ -1337,6 +1365,9 @@ int main( int argc, char **argv )
             break;
         case TEST_IPV6_FRAG_FRAG_TCP:
             do_ipv6_frag_frag_tcp( interface, srcip, dstip, srcmac, dstmac, dstport );
+            break;
+        case TEST_IPV6_FRAG_NOMORE_TCP:
+            do_ipv6_frag_nomore_tcp( interface, srcip, dstip, srcmac, dstmac, dstport );
             break;
         case TEST_IPV6_DSTOPT_FRAG_ICMP6:
             do_ipv6_dstopt_frag_icmp( interface, srcip, dstip, srcmac, dstmac );

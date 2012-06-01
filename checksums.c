@@ -141,7 +141,7 @@ int do_checksum(char *buf, int protocol, int len)
             }
             else /* If not 6 we know it's 4 as we only allow 6 and 4 above. */
             {
-                sum = in_cksum((unsigned short *)&iph_p->ip_src, 8);
+                sum = in_cksum((void *)&iph_p->ip_src, 8);
             }
             sum += ntohs(IPPROTO_UDP + len);
             sum += in_cksum((unsigned short *)udph_p, len);
@@ -161,7 +161,7 @@ int do_checksum(char *buf, int protocol, int len)
             }
             else /* If not 6 we know it's 4 as we only allow 6 and 4 above. */
             {
-                sum = in_cksum((unsigned short *)&iph_p->ip_src, 8);
+                sum = in_cksum((void *)&iph_p->ip_src, 8);
             }
             sum += ntohs(IPPROTO_TCP + len);
             sum += in_cksum((unsigned short *)tcph_p, len);

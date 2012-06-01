@@ -367,7 +367,7 @@ void print_tcph( struct tcphdr *tcph )
  Dst Port: %u\n\
  Seq Num: %u\n\
  Ack Num: %u\n\
- Flags: %02X (%s)\n",
+ Flags: 0x%02X (%s)\n",
         ntohs( tcph->th_sport ),
         ntohs( tcph->th_dport ),
         ntohl( tcph->th_seq ),

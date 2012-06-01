@@ -683,7 +683,7 @@ int get_isn_for_replay( char *interface, char *srcip, char *dstip, unsigned shor
     printf( "Found a matching outgoing TCP SYN:\n\n" );
     tcph = (struct tcphdr *) print_a_packet( (char *) packet_buf, r, IPPROTO_TCP );
     if ( !tcph ) return 0;
-    printf( "Looks good, sending replay.\n\n" );
+    printf( "\nLooks good, sending replay.\n\n" );
     *isn = ntohl( tcph->th_seq );
     *srcport = ntohs( tcph->th_sport );
     free( packet_buf );

@@ -1142,7 +1142,7 @@ void do_ipv6_frag_nomore_tcp( char *interface, char *srcip, char *dstip, char *s
     next = append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     next = append_ipv6( next, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_TCP );
     next = append_frag_last( next, IPPROTO_TCP, 0, fragid );
-    append_tcp_syn( next, srcport, dstport, isn );
+    append_tcp_syn( next, srcport, dstport, htonl( isn ) );
     calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
     synfrag_send( ethh, packet_size );

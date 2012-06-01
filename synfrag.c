@@ -558,50 +558,16 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type )
     return NULL;
 }
 
-int receive_a_packet( char *srcip, char *dstip, unsigned short srcport, unsigned short dstport, enum TEST_TYPE test_type, char **packet_buf, long receive_timeout )
+int receive_a_packet( const char *filter_str, char **packet_buf, long receive_timeout, int signal_pipe )
 {
     struct pcap_pkthdr *received_packet_pcap;
     struct bpf_program pcap_filter;
     unsigned char *received_packet_data;
-/*
- * My back-of-the-napkin for the maximum length for the ipv6 filter string
- * below + 1 byte for the trailing NULL 
- */
-#define FILTER_STR_LEN 203 
-    char filter_str[FILTER_STR_LEN];
     int r, fd;
     fd_set select_me;
     struct timeval ts;
 
-    /*
-     * Something prior to now should have validated srcip and dstip are valid
-     * IP addresses, we hope. Napkin math says we shouldn't even be close to
-     * overflowing our buffer.
-     */
-    if ( IS_TEST_IPV4( test_type ) ) {
-        r = snprintf(
-            (char *) &filter_str,
-            FILTER_STR_LEN,
-            "src %s and dst %s and (icmp or (tcp and src port %i and dst port %i))",
-            srcip,
-            dstip,
-            srcport,
-            dstport
-        );
-    } else {
-        r = snprintf(
-            (char *) &filter_str,
-            FILTER_STR_LEN,
-            /* Attempt to ignore ICMP6 neighbor solicitation/advertisement */
-            "src %s and dst %s and ((icmp6 and ip6[40] != 135 and ip6[40] != 136) or (tcp and src port %i and dst port %i))",
-            srcip,
-            dstip,
-            srcport,
-            dstport
-        );
-    }
-    if ( r < 0 || r >= FILTER_STR_LEN ) errx( 1, "snprintf for pcap filter failed" );
-    if ( pcap_compile( pcap, &pcap_filter, (char *) &filter_str, 1, 0 ) == -1 )
+    if ( pcap_compile( pcap, &pcap_filter, filter_str, 1, 0 ) == -1 )
         errx( 1, "pcap_compile failed: %s", pcap_geterr( pcap ) );
     if ( pcap_setfilter( pcap, &pcap_filter ) == -1 )
         errx( 1, "pcap_setfilter failed: %s", pcap_geterr( pcap ) );
@@ -616,12 +582,15 @@ int receive_a_packet( char *srcip, char *dstip, unsigned short srcport, unsigned
     ts.tv_sec = receive_timeout;
     ts.tv_usec = 0;
 
-    /*
-     * Signal we're ready to go. Still a race condition. I don't see how to
-     * work around this with pcap. 
-     */
-    write( pfd[1], ".", 1 );
-    r = select( fd + 1, &select_me, NULL, NULL, &ts );
+    if ( signal_pipe ) {
+        /*
+         * Signal we're ready to go. Still a race condition. I don't see how to
+         * work around this with pcap. 
+         */
+        write( pfd[1], ".", 1 );
+    }
+
+    r = select( fd + 1, &select_me, NULL, NULL, receive_timeout ? &ts : NULL );
     /* Timed out */
     if ( r == 0 ) return 0;
 
@@ -635,7 +604,93 @@ int receive_a_packet( char *srcip, char *dstip, unsigned short srcport, unsigned
     return received_packet_pcap->len;
 }
 
-int check_received_packet( int buf_len, char *packet_buf, enum TEST_TYPE test_type ) {
+int receive_synfrag_reply( char *srcip, char *dstip, unsigned short srcport, unsigned short dstport, enum TEST_TYPE test_type, char **packet_buf, long receive_timeout )
+{
+    /*
+     * My back-of-the-napkin for the maximum length for the ipv6 filter string
+     * below + 1 byte for the trailing NULL 
+     */
+    const int FILTER_STR_LEN = 203;
+    char filter_str[FILTER_STR_LEN];
+    int r;
+
+    /*
+     * Something prior to now should have validated srcip and dstip are valid
+     * IP addresses, we hope. Napkin math says we shouldn't even be close to
+     * overflowing our buffer.
+     */
+    if ( IS_TEST_IPV4( test_type ) ) {
+        r = snprintf(
+            (char *) &filter_str,
+            FILTER_STR_LEN,
+            "ip src %s and dst %s and (icmp or (tcp and src port %i and dst port %i))",
+            srcip,
+            dstip,
+            srcport,
+            dstport
+        );
+    } else {
+        r = snprintf(
+            (char *) &filter_str,
+            FILTER_STR_LEN,
+            /* Attempt to ignore ICMP6 neighbor solicitation/advertisement */
+            "ip6 src %s and dst %s and ((icmp6 and ip6[40] != 135 and ip6[40] != 136) or (tcp and src port %i and dst port %i))",
+            srcip,
+            dstip,
+            srcport,
+            dstport
+        );
+    }
+    if ( r < 0 || r >= FILTER_STR_LEN ) errx( 1, "snprintf for pcap filter failed" );
+    return receive_a_packet( filter_str, packet_buf, receive_timeout, 1 );
+}
+
+int get_isn_for_replay( char *interface, char *srcip, char *dstip, unsigned short dstport, enum TEST_TYPE test_type, uint32_t *isn, unsigned short *srcport )
+{
+    const int FILTER_STR_LEN = 100;
+    char filter_str[FILTER_STR_LEN];
+    int r;
+    char *packet_buf;
+    struct tcphdr *tcph;
+
+    /*
+     * Something prior to now should have validated srcip and dstip are valid
+     * IP addresses, we hope. Napkin math says we shouldn't even be close to
+     * overflowing our buffer.
+     */
+    if ( IS_TEST_IPV4( test_type ) ) {
+        r = snprintf(
+            (char *) &filter_str,
+            FILTER_STR_LEN,
+            "ip src %s and dst %s and tcp dst port %i",
+            srcip,
+            dstip,
+            dstport
+        );
+    } else {
+        r = snprintf(
+            (char *) &filter_str,
+            FILTER_STR_LEN,
+            "ip6 src %s and dst %s and tcp dst port %i",
+            srcip,
+            dstip,
+            dstport
+        );
+    }
+    if ( r < 0 || r >= FILTER_STR_LEN ) errx( 1, "snprintf for pcap filter failed" );
+    r = receive_a_packet( filter_str, &packet_buf, 0, 0 );
+    if ( !r ) return 0;
+    printf( "Found a matching outgoing TCP SYN:\n\n" );
+    tcph = (struct tcphdr *) print_a_packet( (char *) packet_buf, r, IPPROTO_TCP );
+    if ( !tcph ) return 0;
+    printf( "Looks good, sending replay.\n\n" );
+    *isn = ntohl( tcph->th_seq );
+    *srcport = ntohs( tcph->th_sport );
+    free( packet_buf );
+    return 1;
+}
+
+int check_received_packet( int buf_len, char *packet_buf, enum TEST_TYPE test_type, unsigned short srcport ) {
     struct ether_header *received_packet_data = (struct ether_header *) packet_buf;
     struct tcphdr *tcph;
     struct icmp *icmph;
@@ -646,11 +701,11 @@ int check_received_packet( int buf_len, char *packet_buf, enum TEST_TYPE test_ty
     if ( IS_TEST_IPV4( test_type ) && IS_TEST_ICMP( test_type ) ) {
         icmph = (struct icmp *) print_a_packet( (char *) received_packet_data, buf_len, IPPROTO_ICMP );
         if ( !icmph ) return 0;
-        if ( icmph->icmp_type == ICMP_ECHOREPLY && icmph->icmp_id == htons( SOURCE_PORT ) ) return 1;
+        if ( icmph->icmp_type == ICMP_ECHOREPLY && icmph->icmp_id == htons( srcport ) ) return 1;
     } else if ( IS_TEST_IPV6( test_type ) && IS_TEST_ICMP( test_type ) ) {
         icmp6h = (struct icmp6_hdr *) print_a_packet( (char *) received_packet_data, buf_len, IPPROTO_ICMPV6 );
         if ( !icmp6h ) return 0;
-        if ( icmp6h->icmp6_type == ICMP6_ECHO_REPLY && icmp6h->icmp6_id == htons( SOURCE_PORT ) ) return 1;
+        if ( icmp6h->icmp6_type == ICMP6_ECHO_REPLY && icmp6h->icmp6_id == htons( srcport ) ) return 1;
     } else { /* Assume pcap picked the right address family for our packet. */
         tcph = (struct tcphdr *) print_a_packet( (char *) received_packet_data, buf_len, IPPROTO_TCP );
         if ( !tcph ) return 0;
@@ -663,7 +718,7 @@ int check_received_packet( int buf_len, char *packet_buf, enum TEST_TYPE test_ty
 }
 
 /* IPv4 tests. */
-void do_ipv4_syn( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short dstport )
+void do_ipv4_syn( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short srcport, unsigned short dstport, uint32_t isn )
 {
     struct ip *iph;
     struct tcphdr *tcph;
@@ -678,7 +733,7 @@ void do_ipv4_syn( char *interface, char *srcip, char *dstip, char *srcmac, char 
 
     append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IP );
     append_ipv4( iph, srcip, dstip, IPPROTO_TCP );
-    append_tcp_syn( tcph, SOURCE_PORT, dstport );
+    append_tcp_syn( tcph, srcport, dstport, isn );
     calc_checksum( iph, IPPROTO_TCP, SIZEOF_TCP );
     calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 );
 
@@ -686,7 +741,7 @@ void do_ipv4_syn( char *interface, char *srcip, char *dstip, char *srcmac, char 
     free( ethh );
 }
 
-void do_ipv4_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short dstport )
+void do_ipv4_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short srcport, unsigned short dstport, uint32_t isn )
 {
     struct ip *iph;
     struct tcphdr *tcph;
@@ -702,7 +757,7 @@ void do_ipv4_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, 
 
     append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IP );
     append_ipv4_short_frag1( iph, srcip, dstip, IPPROTO_TCP, fragid );
-    append_tcp_syn( tcph, SOURCE_PORT, dstport );
+    append_tcp_syn( tcph, srcport, dstport, isn );
     calc_checksum( iph, IPPROTO_TCP, SIZEOF_TCP );
     calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 );
 
@@ -751,7 +806,7 @@ void do_ipv4_frag_icmp( char *interface, char *srcip, char *dstip, char *srcmac,
     free( ethh );
 }
 
-void do_ipv4_options_tcp_frag( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short dstport )
+void do_ipv4_options_tcp_frag( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short srcport, unsigned short dstport, uint32_t isn )
 {
     struct ip *iph;
     struct tcphdr *tcph, *tcph_optioned;
@@ -769,7 +824,7 @@ void do_ipv4_options_tcp_frag( char *interface, char *srcip, char *dstip, char *
 
     append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IP );
     append_ipv4_optioned_frag1( iph, srcip, dstip, IPPROTO_TCP, fragid, optlen );
-    append_tcp_syn( tcph_optioned, SOURCE_PORT, dstport );
+    append_tcp_syn( tcph_optioned, srcport, dstport, isn );
     calc_checksum( iph, IPPROTO_TCP, SIZEOF_TCP );
     calc_checksum( iph, IPPROTO_IP, SIZEOF_IPV4 + optlen );
 
@@ -821,7 +876,7 @@ void do_ipv4_options_icmp_frag( char *interface, char *srcip, char *dstip, char 
 }
 
 /* IPv6 tests. */
-void do_ipv6_syn( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short dstport )
+void do_ipv6_syn( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short srcport, unsigned short dstport, uint32_t isn )
 {
     struct ip6_hdr *ip6h;
     struct tcphdr *tcph;
@@ -836,14 +891,14 @@ void do_ipv6_syn( char *interface, char *srcip, char *dstip, char *srcmac, char 
 
     append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     append_ipv6( ip6h, srcip, dstip, IPPROTO_TCP, SIZEOF_TCP );
-    append_tcp_syn( tcph, SOURCE_PORT, dstport );
+    append_tcp_syn( tcph, srcport, dstport, isn );
     calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
     synfrag_send( ethh, packet_size );
     free( ethh );
 }
 
-void do_ipv6_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short dstport )
+void do_ipv6_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short srcport, unsigned short dstport, uint32_t isn )
 {
     struct ip6_hdr *ip6h;
     struct tcphdr *tcph;
@@ -861,7 +916,7 @@ void do_ipv6_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, 
     next = append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     next = append_ipv6( next, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + MINIMUM_FRAGMENT_SIZE );
     next = append_frag_first( next, IPPROTO_TCP, fragid );
-    append_tcp_syn( next, SOURCE_PORT, dstport );
+    append_tcp_syn( next, srcport, dstport, isn );
     calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
     synfrag_send( ethh, packet_size );
@@ -953,7 +1008,7 @@ void do_ipv6_dstopt_frag_icmp( char *interface, char *srcip, char *dstip, char *
     free( ethh );
 }
 
-void do_ipv6_dstopt_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short dstport )
+void do_ipv6_dstopt_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short srcport, unsigned short dstport, uint32_t isn )
 {
     struct ip6_hdr *ip6h;
     struct tcphdr *tcph, *tcph_optioned;
@@ -976,7 +1031,7 @@ void do_ipv6_dstopt_frag_tcp( char *interface, char *srcip, char *dstip, char *s
     next = append_ipv6( next, srcip, dstip, IPPROTO_DSTOPTS, SIZEOF_DESTOPT + optlen + SIZEOF_FRAG + MINIMUM_FRAGMENT_SIZE );
     next = append_dest( next, IPPROTO_FRAGMENT, optlen );
     next = append_frag_first( next, IPPROTO_TCP, fragid );
-    append_tcp_syn( next, SOURCE_PORT, dstport );
+    append_tcp_syn( next, srcport, dstport, isn );
     calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
     synfrag_send( ethh, packet_size );
@@ -991,7 +1046,7 @@ void do_ipv6_dstopt_frag_tcp( char *interface, char *srcip, char *dstip, char *s
     free( ethh );
 }
 
-void do_ipv6_frag_dstopt_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short dstport )
+void do_ipv6_frag_dstopt_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short srcport, unsigned short dstport, uint32_t isn )
 {
     struct ip6_hdr *ip6h;
     struct tcphdr *tcph, *tcph_optioned;
@@ -1018,7 +1073,7 @@ void do_ipv6_frag_dstopt_tcp( char *interface, char *srcip, char *dstip, char *s
     next = append_ipv6( next, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_DESTOPT + optlen - DSTOPT_OVERFLOW );
     next = append_frag_first( next, IPPROTO_DSTOPTS, fragid );
     tcph_optioned = append_dest( next, IPPROTO_TCP, optlen );
-    append_tcp_syn( tcph_optioned, SOURCE_PORT, dstport );
+    append_tcp_syn( tcph_optioned, srcport, dstport, isn );
     calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
     synfrag_send( ethh, packet_size );
@@ -1033,7 +1088,7 @@ void do_ipv6_frag_dstopt_tcp( char *interface, char *srcip, char *dstip, char *s
     free( ethh );
 }
 
-void do_ipv6_frag_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short dstport )
+void do_ipv6_frag_frag_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short srcport, unsigned short dstport, uint32_t isn )
 {
     struct ip6_hdr *ip6h;
     struct tcphdr *tcph;
@@ -1054,7 +1109,7 @@ void do_ipv6_frag_frag_tcp( char *interface, char *srcip, char *dstip, char *src
     next = append_ipv6( next, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + MINIMUM_FRAGMENT_SIZE );
     next = append_frag_first( next, IPPROTO_FRAGMENT, fragid );
     next = append_frag( next, IPPROTO_TCP, 0, fragid, 0 );
-    append_tcp_syn( next, SOURCE_PORT, dstport );
+    append_tcp_syn( next, srcport, dstport, isn );
     calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
     synfrag_send( ethh, packet_size );
@@ -1069,7 +1124,7 @@ void do_ipv6_frag_frag_tcp( char *interface, char *srcip, char *dstip, char *src
     free( ethh );
 }
 
-void do_ipv6_frag_nomore_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short dstport )
+void do_ipv6_frag_nomore_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short srcport, unsigned short dstport, uint32_t isn )
 {
     struct ip6_hdr *ip6h;
     struct tcphdr *tcph;
@@ -1087,7 +1142,7 @@ void do_ipv6_frag_nomore_tcp( char *interface, char *srcip, char *dstip, char *s
     next = append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     next = append_ipv6( next, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_TCP );
     next = append_frag_last( next, IPPROTO_TCP, 0, fragid );
-    append_tcp_syn( next, SOURCE_PORT, dstport );
+    append_tcp_syn( next, srcport, dstport, isn );
     calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
     synfrag_send( ethh, packet_size );
@@ -1122,7 +1177,7 @@ void fork_pcap_listener( char *dstip, char *srcip, unsigned short dstport, unsig
 
     pcap_setdirection( pcap, PCAP_D_IN );
 
-    r = receive_a_packet( dstip, srcip, dstport, SOURCE_PORT, test_type, &packet_buf, receive_timeout );
+    r = receive_synfrag_reply( dstip, srcip, dstport, srcport, test_type, &packet_buf, receive_timeout );
     if ( r ) {
         write( pfd[1], &r, sizeof( int ) );
         write( pfd[1], packet_buf, r );
@@ -1173,7 +1228,9 @@ void exit_with_usage( void )
     fprintf( stderr, "--dstmac     Destination MAC address (default gw or target host if on subnet)\n" );
     fprintf( stderr, "--interface  Packet source interface\n" );
     fprintf( stderr, "--test       Type of test to run\n" );
-    fprintf( stderr, "--timeout    Reply timeout in seconds (defaults to 10)\n\n" );
+    fprintf( stderr, "--timeout    Reply timeout in seconds (defaults to 10)\n" );
+    fprintf( stderr, "--replay     Listen for an outgoing TCP SYN packet that matches the specified\n"
+                     "             parameters and re-send a duplicate in the test packet format.\n\n" );
     print_test_types();
     fprintf( stderr, "\nAll TCP tests send syn packets, all ICMP/6 test send ping.\n" );
     fprintf( stderr, "All \"frag\" tests send fragments that are below the minimum packet size.\n" );
@@ -1206,7 +1263,8 @@ enum TEST_TYPE parse_args(
     char **dstmac,
     char **interface,
     char **test_name,
-    long *timeout
+    long *timeout,
+    int *replay
 ) {
     int x = 0;
     int option_index = 0;
@@ -1224,13 +1282,14 @@ enum TEST_TYPE parse_args(
         {"test", required_argument, 0, 0},
         {"help", no_argument, 0, 0},
         {"timeout", required_argument, 0, 0},
+        {"replay", no_argument, 0, 0},
         {0, 0, 0, 0}
     };
 
     if ( argc < 2 ) exit_with_usage();
 
     *srcip = *dstip = *dstmac = *interface = NULL;
-    *srcport = *dstport = 0;
+    *srcport = *dstport = *replay = 0;
 
     while ( 1 ) {
         c = getopt_long(argc, argv, "h", long_options, &option_index);
@@ -1265,6 +1324,9 @@ enum TEST_TYPE parse_args(
             tmptime = atol( optarg );
             if ( tmptime < 1 ) errx( 1, "Invalid value for timeout" );
             *timeout = tmptime;
+
+        } else if ( strcmp( long_options[option_index].name, "replay" ) == 0 ) {
+            *replay = 1;
 
         } else if ( strcmp( long_options[option_index].name, "test" ) == 0 ) {
             while ( ( possible_match = test_names[x] ) ) {
@@ -1309,13 +1371,15 @@ int main( int argc, char **argv )
     char *dstip;
     char *srcmac;
     char *dstmac;
-    unsigned short dstport;
-    unsigned short srcport;
+    uint16_t dstport;
+    uint16_t srcport = DEFAULT_SRCPORT;;
+    uint32_t isn = htonl( rand() );
     char *packet_buf;
     char *test_name;
     long receive_timeout = DEFAULT_TIMEOUT_SECONDS;
+    int replay;
 
-    test_type = parse_args( argc, argv, &srcip, &dstip, &srcport, &dstport, &dstmac, &interface, &test_name, &receive_timeout );
+    test_type = parse_args( argc, argv, &srcip, &dstip, &srcport, &dstport, &dstmac, &interface, &test_name, &receive_timeout, &replay );
     srand( getpid() );
 
     printf( "Starting test \"%s\". Opening interface \"%s\".\n\n", test_name, interface );
@@ -1327,47 +1391,53 @@ int main( int argc, char **argv )
         errx( 1, "non-ethernet interface specified." );
 
     if ( ( srcmac = get_interface_mac( interface ) ) == NULL )
-        err( 1, "Failed to get MAC address for %s", interface );
+        errx( 1, "Failed to get MAC address for %s", interface );
 
-    fork_pcap_listener( dstip, srcip, dstport, SOURCE_PORT, test_type, receive_timeout );
+    if ( replay ) {
+        if ( !get_isn_for_replay( interface, srcip, dstip, dstport, test_type, &isn, &srcport ) ) {
+            errx( 1, "Failed to find outgoing TCP SYN to replay." );
+        }
+    }
+
+    fork_pcap_listener( dstip, srcip, dstport, srcport, test_type, receive_timeout );
 
     switch ( test_type ) {
         case TEST_IPV4_TCP:
-            do_ipv4_syn( interface, srcip, dstip, srcmac, dstmac, dstport );
+            do_ipv4_syn( interface, srcip, dstip, srcmac, dstmac, srcport, dstport, isn );
             break;
         case TEST_IPV4_FRAG_TCP:
-            do_ipv4_frag_tcp( interface, srcip, dstip, srcmac, dstmac, dstport );
+            do_ipv4_frag_tcp( interface, srcip, dstip, srcmac, dstmac, srcport, dstport, isn );
             break;
         case TEST_IPV4_FRAG_ICMP:
             do_ipv4_frag_icmp( interface, srcip, dstip, srcmac, dstmac );
             break;
         case TEST_IPV4_DSTOPT_FRAG_TCP:
-            do_ipv4_options_tcp_frag( interface, srcip, dstip, srcmac, dstmac, dstport );
+            do_ipv4_options_tcp_frag( interface, srcip, dstip, srcmac, dstmac, srcport, dstport, isn );
             break;
         case TEST_IPV4_DSTOPT_FRAG_ICMP:
             do_ipv4_options_icmp_frag( interface, srcip, dstip, srcmac, dstmac );
             break;
 
         case TEST_IPV6_TCP:
-            do_ipv6_syn( interface, srcip, dstip, srcmac, dstmac, dstport );
+            do_ipv6_syn( interface, srcip, dstip, srcmac, dstmac, srcport, dstport, isn );
             break;
         case TEST_IPV6_FRAG_TCP:
-            do_ipv6_frag_tcp( interface, srcip, dstip, srcmac, dstmac, dstport );
+            do_ipv6_frag_tcp( interface, srcip, dstip, srcmac, dstmac, srcport, dstport, isn );
             break;
         case TEST_IPV6_FRAG_ICMP6:
             do_ipv6_frag_icmp( interface, srcip, dstip, srcmac, dstmac );
             break;
         case TEST_IPV6_DSTOPT_FRAG_TCP:
-            do_ipv6_dstopt_frag_tcp( interface, srcip, dstip, srcmac, dstmac, dstport );
+            do_ipv6_dstopt_frag_tcp( interface, srcip, dstip, srcmac, dstmac, srcport, dstport, isn );
             break;
         case TEST_IPV6_FRAG_DSTOPT_TCP:
-            do_ipv6_frag_dstopt_tcp( interface, srcip, dstip, srcmac, dstmac, dstport );
+            do_ipv6_frag_dstopt_tcp( interface, srcip, dstip, srcmac, dstmac, srcport, dstport, isn );
             break;
         case TEST_IPV6_FRAG_FRAG_TCP:
-            do_ipv6_frag_frag_tcp( interface, srcip, dstip, srcmac, dstmac, dstport );
+            do_ipv6_frag_frag_tcp( interface, srcip, dstip, srcmac, dstmac, srcport, dstport, isn );
             break;
         case TEST_IPV6_FRAG_NOMORE_TCP:
-            do_ipv6_frag_nomore_tcp( interface, srcip, dstip, srcmac, dstmac, dstport );
+            do_ipv6_frag_nomore_tcp( interface, srcip, dstip, srcmac, dstmac, srcport, dstport, isn );
             break;
         case TEST_IPV6_DSTOPT_FRAG_ICMP6:
             do_ipv6_dstopt_frag_icmp( interface, srcip, dstip, srcmac, dstmac );
@@ -1384,7 +1454,7 @@ int main( int argc, char **argv )
         fprintf( stderr, "Test failed, no response before time out (%li seconds).\n", receive_timeout );
         return 1;
     }
-    if ( check_received_packet( r, packet_buf, test_type ) ) {
+    if ( check_received_packet( r, packet_buf, test_type, srcport ) ) {
         printf( "\nTest was successful.\n" );
         free( packet_buf );
         return 0;

@@ -26,10 +26,10 @@
  */
 
 void *append_ethernet( void *, char *, char *, short int );
-void *append_tcp_syn( void *, unsigned short, unsigned short );
+void *append_tcp( void *, unsigned short, unsigned short, int, uint32_t, uint32_t );
+void *append_tcp_syn( void *, unsigned short, unsigned short, uint32_t );
 void *append_icmp_ping( void *, unsigned short );
 void *append_icmp6_ping( void *, unsigned short );
-void *append_bare_ipv4( void *, char *, char *, unsigned char );
 void *append_ipv4( void *, char *, char *, unsigned char );
 void *append_ipv4_short_frag1( void *, char *, char *, unsigned char, unsigned short );
 void *append_ipv4_frag2( void *, char *, char *, unsigned char, unsigned short, unsigned short );

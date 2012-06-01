@@ -100,22 +100,27 @@ void *append_ethernet( void *buf, char *srcmac, char *dstmac, short int ethertyp
     return (char *) ethh + SIZEOF_ETHER;
 }
 
-void *append_tcp_syn( void *buf, unsigned short srcport, unsigned short dstport )
+void *append_tcp( void *buf, unsigned short srcport, unsigned short dstport, int flags, uint32_t isn, uint32_t ack )
 {
     struct tcphdr *tcph = buf;
 
     tcph->th_sport = htons( srcport );
     tcph->th_dport = htons( dstport );
-    tcph->th_seq = htonl( rand() );
-    tcph->th_ack = 0;
+    tcph->th_seq = htonl( isn );
+    tcph->th_ack = htonl( ack );
     tcph->th_x2 = 0;
     tcph->th_off = SIZEOF_TCP / 4;
-    tcph->th_flags = TH_SYN;
+    tcph->th_flags = flags;
     tcph->th_win = TCP_WINDOW;
     tcph->th_sum = 0;
     tcph->th_urp = 0;
 
     return (char *)tcph + SIZEOF_TCP;
+}
+
+void *append_tcp_syn( void *buf, unsigned short srcport, unsigned short dstport, uint32_t isn )
+{
+    return append_tcp( buf, srcport, dstport, TH_SYN, isn, 0 );
 }
 
 void *append_icmp_ping( void *buf, unsigned short payload_length )
@@ -146,7 +151,7 @@ void *append_icmp6_ping( void *buf, unsigned short payload_length )
     return (char *)icmp6h + SIZEOF_ICMP6 + payload_length;
 }
 
-void *append_bare_ipv4( void *buf, char *srcip, char *dstip, unsigned char protocol )
+void *append_ipv4( void *buf, char *srcip, char *dstip, unsigned char protocol )
 {
     struct ip *iph = buf;
 
@@ -165,16 +170,11 @@ void *append_bare_ipv4( void *buf, char *srcip, char *dstip, unsigned char proto
     return (char *)iph + SIZEOF_IPV4;
 }
 
-void *append_ipv4( void *buf, char *srcip, char *dstip, unsigned char protocol )
-{
-    return append_bare_ipv4( buf, srcip, dstip, protocol );
-}
-
 void *append_ipv4_short_frag1( void *buf, char *srcip, char *dstip, unsigned char protocol, unsigned short fragid )
 {
     struct ip *iph = buf;
 
-    append_bare_ipv4( iph, srcip, dstip, protocol );
+    append_ipv4( iph, srcip, dstip, protocol );
     iph->ip_off = htons( 1 << IP_FLAGS_OFFSET ); /* Set More Fragments (MF) bit */
     iph->ip_id = htons( fragid );
     iph->ip_len = htons( SIZEOF_IPV4 + MINIMUM_FRAGMENT_SIZE );
@@ -186,7 +186,7 @@ void *append_ipv4_frag2( void *buf, char *srcip, char *dstip, unsigned char prot
 {
     struct ip *iph = buf;
 
-    append_bare_ipv4( iph, srcip, dstip, protocol );
+    append_ipv4( iph, srcip, dstip, protocol );
     iph->ip_off = htons( 1 );
     iph->ip_id = htons( fragid );
     iph->ip_len = htons( SIZEOF_IPV4 + payload_length );
@@ -198,7 +198,7 @@ void *append_ipv4_optioned_frag1( void *buf, char *srcip, char *dstip, unsigned 
 {
     struct ip *iph = buf;
 
-    append_bare_ipv4( iph, srcip, dstip, protocol );
+    append_ipv4( iph, srcip, dstip, protocol );
     iph->ip_off = htons( 1 << IP_FLAGS_OFFSET ); /* Set More Fragments (MF) bit */
     iph->ip_id = htons( fragid );
     iph->ip_len = htons( SIZEOF_IPV4 + optlen + MINIMUM_FRAGMENT_SIZE );

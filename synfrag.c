@@ -1220,15 +1220,14 @@ void exit_with_usage( void )
 {
     fprintf( stderr, "synfrag usage:\n" );
     fprintf( stderr, "--help | -h  This message.\n" );
-    fprintf( stderr, "--srcip      Source IP address (this hosts)\n" );
-    fprintf( stderr, "--dstip      Destination IP address (target)\n" );
-    /* Currently not used.
-    fprintf( stderr, "--srcport    Source port for TCP tests\n" ); */
-    fprintf( stderr, "--dstport    Destination port for TCP tests\n" );
-    fprintf( stderr, "--dstmac     Destination MAC address (default gw or target host if on subnet)\n" );
-    fprintf( stderr, "--interface  Packet source interface\n" );
-    fprintf( stderr, "--test       Type of test to run\n" );
-    fprintf( stderr, "--timeout    Reply timeout in seconds (defaults to 10)\n" );
+    fprintf( stderr, "--srcip      Source IP address (this host).\n" );
+    fprintf( stderr, "--dstip      Destination IP address (target).\n" );
+    fprintf( stderr, "--srcport    Source port for TCP tests.\n" );
+    fprintf( stderr, "--dstport    Destination port for TCP tests.\n" );
+    fprintf( stderr, "--dstmac     Destination MAC address (default gw or target host if on subnet).\n" );
+    fprintf( stderr, "--interface  Packet source interface.\n" );
+    fprintf( stderr, "--test       Type of test to run.\n" );
+    fprintf( stderr, "--timeout    Reply timeout in seconds (defaults to 10).\n" );
     fprintf( stderr, "--replay     Listen for an outgoing TCP SYN packet that matches the specified\n"
                      "             parameters and re-send a duplicate in the test packet format.\n\n" );
     print_test_types();
@@ -1450,10 +1449,7 @@ int main( int argc, char **argv )
     printf( "Packet transmission successful, waiting for reply...\n\n" );
 
     r = harvest_pcap_listener( &packet_buf );
-    if ( !r ) {
-        fprintf( stderr, "Test failed, no response before time out (%li seconds).\n", receive_timeout );
-        return 1;
-    }
+    if ( !r ) err( 1, "Test failed, no response before time out (%li seconds).\n", receive_timeout );
     if ( check_received_packet( r, packet_buf, test_type, srcport ) ) {
         printf( "\nTest was successful.\n" );
         free( packet_buf );

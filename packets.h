@@ -25,7 +25,7 @@
  * Author: John Eaglesham
  */
 
-void *append_ethernet( void *, char *, char *, short int );
+void *append_ethernet( void *, char *, char *, unsigned short );
 void *append_tcp( void *, unsigned short, unsigned short, int, uint32_t, uint32_t );
 void *append_tcp_syn( void *, unsigned short, unsigned short, uint32_t );
 void *append_icmp_ping( void *, unsigned short );

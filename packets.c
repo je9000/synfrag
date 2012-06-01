@@ -73,7 +73,7 @@
 /* This size is fixed but extends past the standard basic icmp header. */
 #define SIZEOF_PING 8
 
-void *append_ethernet( void *buf, char *srcmac, char *dstmac, short int ethertype )
+void *append_ethernet( void *buf, char *srcmac, char *dstmac, unsigned short ethertype )
 {
     struct ether_header *ethh = buf;
     if ( sscanf( srcmac, "%2hhx:%2hhx:%2hhx:%2hhx:%2hhx:%2hhx",

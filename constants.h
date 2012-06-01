@@ -27,7 +27,6 @@
 
 #define DEFAULT_TIMEOUT_SECONDS 10
 #define IP_FLAGS_OFFSET 13
-#define SOURCE_PORT 44128
 #define BIG_PACKET_SIZE 1500
 #define PCAP_CAPTURE_LEN BIG_PACKET_SIZE
 #define TCP_WINDOW 65535
@@ -39,6 +38,10 @@
  */
 #define FRAGMENT_OFFSET_TO_BYTES 8
 #define MINIMUM_FRAGMENT_SIZE FRAGMENT_OFFSET_TO_BYTES
+/*
+ * These should be different between IPv4 and IPv6 but in practice it seems
+ * everyone accepts 68 bytes.
+ */
 #define MINIMUM_PACKET_SIZE 68
 #define DEFAULT_SRCPORT 44129
 

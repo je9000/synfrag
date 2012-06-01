@@ -1257,7 +1257,7 @@ enum TEST_TYPE parse_args(
     char **argv,
     char **srcip,
     char **dstip,
-    unsigned short *srcport,
+    int *srcport,
     unsigned short *dstport,
     char **dstmac,
     char **interface,
@@ -1288,7 +1288,8 @@ enum TEST_TYPE parse_args(
     if ( argc < 2 ) exit_with_usage();
 
     *srcip = *dstip = *dstmac = *interface = NULL;
-    *srcport = *dstport = *replay = 0;
+    *srcport = -1;
+    *dstport = *replay = 0;
 
     while ( 1 ) {
         c = getopt_long(argc, argv, "h", long_options, &option_index);
@@ -1352,8 +1353,6 @@ enum TEST_TYPE parse_args(
     }
 
     if ( IS_TEST_TCP( test_type ) ) {
-        /* Currently not used.
-        if ( !*srcport ) errx( 1, "Missing srcport" ); */
         if ( !*dstport ) errx( 1, "Missing dstport" );
     }
 
@@ -1371,15 +1370,23 @@ int main( int argc, char **argv )
     char *srcmac;
     char *dstmac;
     uint16_t dstport;
-    uint16_t srcport = DEFAULT_SRCPORT;;
+    int srcport_param;
+    uint16_t srcport;
     uint32_t isn = htonl( rand() );
     char *packet_buf;
     char *test_name;
     long receive_timeout = DEFAULT_TIMEOUT_SECONDS;
     int replay;
 
-    test_type = parse_args( argc, argv, &srcip, &dstip, &srcport, &dstport, &dstmac, &interface, &test_name, &receive_timeout, &replay );
+    test_type = parse_args( argc, argv, &srcip, &dstip, &srcport_param, &dstport, &dstmac, &interface, &test_name, &receive_timeout, &replay );
     srand( getpid() );
+
+    if ( srcport_param == -1 ) {
+        srcport = rand();
+        if ( srcport < 1024 ) srcport += 1024;
+    } else {
+        srcport = srcport_param;
+    }
 
     printf( "Starting test \"%s\". Opening interface \"%s\".\n\n", test_name, interface );
 
@@ -1449,7 +1456,7 @@ int main( int argc, char **argv )
     printf( "Packet transmission successful, waiting for reply...\n\n" );
 
     r = harvest_pcap_listener( &packet_buf );
-    if ( !r ) err( 1, "Test failed, no response before time out (%li seconds).\n", receive_timeout );
+    if ( !r ) errx( 1, "Test failed, no response before time out (%li seconds).\n", receive_timeout );
     if ( check_received_packet( r, packet_buf, test_type, srcport ) ) {
         printf( "\nTest was successful.\n" );
         free( packet_buf );

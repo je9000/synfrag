@@ -57,7 +57,6 @@
 #include "packets.h"
 
 #define IP_FLAGS_OFFSET 13
-#define SOURCE_PORT 44128
 #define TCP_WINDOW 65535
  
 #define FRAGMENT_OFFSET_TO_BYTES 8
@@ -130,7 +129,7 @@ void *append_icmp_ping( void *buf, unsigned short payload_length )
     icmph->icmp_type = ICMP_ECHO;
     icmph->icmp_code = 0;
     icmph->icmp_cksum = 0;
-    icmph->icmp_id = htons( SOURCE_PORT );
+    icmph->icmp_id = htons( (unsigned short) rand() );
     icmph->icmp_seq = htons( 1 );
     memset( (char *) icmph + SIZEOF_PING, 0x01, payload_length );
 
@@ -144,7 +143,7 @@ void *append_icmp6_ping( void *buf, unsigned short payload_length )
     icmp6h->icmp6_type = ICMP6_ECHO_REQUEST;
     icmp6h->icmp6_code = 0;
     icmp6h->icmp6_cksum = 0;
-    icmp6h->icmp6_id = htons( SOURCE_PORT );
+    icmp6h->icmp6_id = htons( (unsigned short) rand() );
     icmp6h->icmp6_seq = htons( 1 );
     memset( (char *) icmp6h + SIZEOF_ICMP6, 0x01, payload_length );
 

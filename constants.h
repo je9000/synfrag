@@ -44,6 +44,7 @@
  */
 #define MINIMUM_PACKET_SIZE 68
 #define DEFAULT_SRCPORT 44129
+#define ICMP_ID 34254
 
 /* Save time typing/screen real estate. */
 #define SIZEOF_ICMP6 sizeof( struct icmp6_hdr )

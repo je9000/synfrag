@@ -684,13 +684,13 @@ int get_isn_for_replay( char *interface, char *srcip, char *dstip, unsigned shor
     tcph = (struct tcphdr *) print_a_packet( (char *) packet_buf, r, IPPROTO_TCP );
     if ( !tcph ) return 0;
     printf( "\nLooks good, sending replay.\n\n" );
-    *isn = ntohl( tcph->th_seq );
+    *isn = tcph->th_seq;
     *srcport = ntohs( tcph->th_sport );
     free( packet_buf );
     return 1;
 }
 
-int check_received_packet( int buf_len, char *packet_buf, enum TEST_TYPE test_type, unsigned short srcport ) {
+int check_received_packet( int buf_len, char *packet_buf, enum TEST_TYPE test_type ) {
     struct ether_header *received_packet_data = (struct ether_header *) packet_buf;
     struct tcphdr *tcph;
     struct icmp *icmph;
@@ -701,11 +701,11 @@ int check_received_packet( int buf_len, char *packet_buf, enum TEST_TYPE test_ty
     if ( IS_TEST_IPV4( test_type ) && IS_TEST_ICMP( test_type ) ) {
         icmph = (struct icmp *) print_a_packet( (char *) received_packet_data, buf_len, IPPROTO_ICMP );
         if ( !icmph ) return 0;
-        if ( icmph->icmp_type == ICMP_ECHOREPLY && icmph->icmp_id == htons( srcport ) ) return 1;
+        if ( icmph->icmp_type == ICMP_ECHOREPLY && icmph->icmp_id == htons( ICMP_ID ) ) return 1;
     } else if ( IS_TEST_IPV6( test_type ) && IS_TEST_ICMP( test_type ) ) {
         icmp6h = (struct icmp6_hdr *) print_a_packet( (char *) received_packet_data, buf_len, IPPROTO_ICMPV6 );
         if ( !icmp6h ) return 0;
-        if ( icmp6h->icmp6_type == ICMP6_ECHO_REPLY && icmp6h->icmp6_id == htons( srcport ) ) return 1;
+        if ( icmp6h->icmp6_type == ICMP6_ECHO_REPLY && icmp6h->icmp6_id == htons( ICMP_ID ) ) return 1;
     } else { /* Assume pcap picked the right address family for our packet. */
         tcph = (struct tcphdr *) print_a_packet( (char *) received_packet_data, buf_len, IPPROTO_TCP );
         if ( !tcph ) return 0;
@@ -1142,7 +1142,7 @@ void do_ipv6_frag_nomore_tcp( char *interface, char *srcip, char *dstip, char *s
     next = append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     next = append_ipv6( next, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_TCP );
     next = append_frag_last( next, IPPROTO_TCP, 0, fragid );
-    append_tcp_syn( next, srcport, dstport, htonl( isn ) );
+    append_tcp_syn( next, srcport, dstport, isn );
     calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
     synfrag_send( ethh, packet_size );
@@ -1457,7 +1457,7 @@ int main( int argc, char **argv )
 
     r = harvest_pcap_listener( &packet_buf );
     if ( !r ) errx( 1, "Test failed, no response before time out (%li seconds).\n", receive_timeout );
-    if ( check_received_packet( r, packet_buf, test_type, srcport ) ) {
+    if ( check_received_packet( r, packet_buf, test_type ) ) {
         printf( "\nTest was successful.\n" );
         free( packet_buf );
         return 0;

@@ -987,7 +987,7 @@ void do_ipv6_dstopt_frag_icmp( char *interface, char *srcip, char *dstip, char *
     ethh = (struct ether_header *) malloc_check( BIG_PACKET_SIZE );
     ip6h = (struct ip6_hdr *) ( (char *) ethh + SIZEOF_ETHER );
     icmp6h = (struct icmp6_hdr *) ( (char *) ip6h + SIZEOF_IPV6 + SIZEOF_FRAG );
-    icmp6h_optioned = (struct icmp6_hdr *) ( (char *) ip6h + SIZEOF_IPV6 + SIZEOF_DESTOPT + optlen + SIZEOF_FRAG );
+    icmp6h_optioned = (struct icmp6_hdr *) ( (char *) ip6h + SIZEOF_IPV6 + SIZEOF_DESTOPT + optlen + SIZEOF_FRAG + MINIMUM_FRAGMENT_SIZE );
 
     next = append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     next = append_ipv6( next, srcip, dstip, IPPROTO_DSTOPTS, SIZEOF_DESTOPT + optlen + SIZEOF_FRAG + MINIMUM_FRAGMENT_SIZE );
@@ -1002,7 +1002,7 @@ void do_ipv6_dstopt_frag_icmp( char *interface, char *srcip, char *dstip, char *
 
     next = append_ipv6( ip6h, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_ICMP6 + pinglen - MINIMUM_FRAGMENT_SIZE );
     next = append_frag_last( next, IPPROTO_ICMPV6, MINIMUM_FRAGMENT_SIZE, fragid );
-    memmove( icmp6h, (char *) icmp6h_optioned + MINIMUM_FRAGMENT_SIZE, SIZEOF_ICMP6 + pinglen - MINIMUM_FRAGMENT_SIZE );
+    memmove( icmp6h, icmp6h_optioned, SIZEOF_ICMP6 + pinglen - MINIMUM_FRAGMENT_SIZE );
 
     synfrag_send( ethh, packet_size );
     free( ethh );
@@ -1025,7 +1025,7 @@ void do_ipv6_dstopt_frag_tcp( char *interface, char *srcip, char *dstip, char *s
     ethh = (struct ether_header *) malloc_check( BIG_PACKET_SIZE );
     ip6h = (struct ip6_hdr *) ( (char *) ethh + SIZEOF_ETHER );
     tcph = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + SIZEOF_FRAG );
-    tcph_optioned = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + SIZEOF_DESTOPT + optlen + SIZEOF_FRAG );
+    tcph_optioned = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + SIZEOF_DESTOPT + optlen + SIZEOF_FRAG + MINIMUM_FRAGMENT_SIZE );
 
     next = append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     next = append_ipv6( next, srcip, dstip, IPPROTO_DSTOPTS, SIZEOF_DESTOPT + optlen + SIZEOF_FRAG + MINIMUM_FRAGMENT_SIZE );
@@ -1040,7 +1040,7 @@ void do_ipv6_dstopt_frag_tcp( char *interface, char *srcip, char *dstip, char *s
 
     next = append_ipv6( ip6h, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
     next = append_frag_last( next, IPPROTO_TCP, MINIMUM_FRAGMENT_SIZE, fragid );
-    memmove( tcph, (char *) tcph_optioned + MINIMUM_FRAGMENT_SIZE, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
+    memmove( tcph, tcph_optioned, SIZEOF_TCP - MINIMUM_FRAGMENT_SIZE );
 
     synfrag_send( ethh, packet_size );
     free( ethh );
@@ -1082,7 +1082,7 @@ void do_ipv6_frag_dstopt_tcp( char *interface, char *srcip, char *dstip, char *s
 
     next = append_ipv6( ip6h, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_TCP + DSTOPT_OVERFLOW );
     next = append_frag_last( next, IPPROTO_DSTOPTS, SIZEOF_DESTOPT + optlen - DSTOPT_OVERFLOW, fragid );
-    memmove( tcph, (char *) tcph_optioned, SIZEOF_TCP );
+    memmove( tcph, tcph_optioned, SIZEOF_TCP );
 
     synfrag_send( ethh, packet_size );
     free( ethh );
@@ -1098,17 +1098,18 @@ void do_ipv6_frag_frag_tcp( char *interface, char *srcip, char *dstip, char *src
     void *next;
     void *tcph_optioned;
 
-    packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + SIZEOF_FRAG + SIZEOF_FRAG;
+    packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + SIZEOF_FRAG + SIZEOF_FRAG + SIZEOF_FRAG;
 
     ethh = (struct ether_header *) malloc_check( BIG_PACKET_SIZE );
     ip6h = (struct ip6_hdr *) ( (char *) ethh + SIZEOF_ETHER );
     tcph = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + SIZEOF_FRAG );
-    tcph_optioned = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + SIZEOF_FRAG + SIZEOF_FRAG );
+    tcph_optioned = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + SIZEOF_FRAG + SIZEOF_FRAG + SIZEOF_FRAG );
 
     next = append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
-    next = append_ipv6( next, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + MINIMUM_FRAGMENT_SIZE );
+    next = append_ipv6( next, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_FRAG + SIZEOF_FRAG );
     next = append_frag_first( next, IPPROTO_FRAGMENT, fragid );
-    next = append_frag( next, IPPROTO_TCP, 0, fragid, 0 );
+    next = append_frag( next, IPPROTO_FRAGMENT, 0, fragid + 1, 0 );
+    next = append_frag( next, IPPROTO_TCP, 0, fragid + 2, 0 );
     append_tcp_syn( next, srcport, dstport, isn );
     calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
@@ -1117,7 +1118,7 @@ void do_ipv6_frag_frag_tcp( char *interface, char *srcip, char *dstip, char *src
     packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + SIZEOF_FRAG + SIZEOF_TCP;
 
     next = append_ipv6( ip6h, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_TCP );
-    append_frag_last( next, IPPROTO_FRAGMENT, SIZEOF_FRAG, fragid );
+    append_frag_last( next, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_FRAG, fragid );
     memmove( tcph, tcph_optioned, SIZEOF_TCP );
 
     synfrag_send( ethh, packet_size );

@@ -1240,8 +1240,8 @@ void exit_with_usage( void )
 
 void copy_arg_string( char **dst, char *opt )
 {
-    *dst = malloc_check( strlen( opt ) );
-    memcpy( *dst, opt, strlen( opt) );
+    *dst = malloc_check( strlen( opt ) + 1 );
+    memcpy( *dst, opt, strlen( opt) + 1 );
 }
 
 void ip_test_arg( char *opt )

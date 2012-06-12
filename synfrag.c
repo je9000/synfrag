@@ -978,7 +978,7 @@ void do_ipv6_dstopt_frag_icmp( char *interface, char *srcip, char *dstip, char *
     );
     /*
      * pinglen must be > 6 or our first packet will be <= MINIMUM_PACKET_SIZE bytes and
-     * our second packet empty. 
+     * our second packet empty. -- I don't think this applies any more? XXX
      */
     unsigned short pinglen = 40;
 

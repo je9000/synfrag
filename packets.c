@@ -56,22 +56,6 @@
 #include "constants.h"
 #include "packets.h"
 
-#define IP_FLAGS_OFFSET 13
-#define TCP_WINDOW 65535
- 
-#define FRAGMENT_OFFSET_TO_BYTES 8
-#define MINIMUM_FRAGMENT_SIZE FRAGMENT_OFFSET_TO_BYTES
-#define MINIMUM_PACKET_SIZE 68
-
-/* Save time typing/screen real estate. */
-#define SIZEOF_ICMP6 sizeof( struct icmp6_hdr )
-#define SIZEOF_TCP sizeof( struct tcphdr )
-#define SIZEOF_IPV4 sizeof( struct ip )
-#define SIZEOF_IPV6 sizeof( struct ip6_hdr )
-#define SIZEOF_ETHER sizeof( struct ether_header )
-/* This size is fixed but extends past the standard basic icmp header. */
-#define SIZEOF_PING 8
-
 void *append_ethernet( void *buf, char *srcmac, char *dstmac, unsigned short ethertype )
 {
     struct ether_header *ethh = buf;
@@ -242,12 +226,12 @@ void *append_frag( void *buf, unsigned char protocol, unsigned short offset, uns
     return (char *) buf + sizeof( struct ip6_frag );
 }
 
-void *append_dest( void *buf, unsigned char protocol, unsigned char optlen )
+void *append_dest( void *buf, unsigned char protocol, unsigned int optlen )
 {
     struct ip6_dest *desth = (struct ip6_dest *) buf;
 
     desth->ip6d_nxt = protocol;
-    if ( optlen % 8 != 6 ) errx( 1, "optlen value not valid" );
+    if ( optlen > 255 * 8 || optlen % 8 != 6 ) errx( 1, "optlen value not valid" );
     desth->ip6d_len = optlen / 8;
     *( (char *) desth + sizeof( struct ip6_dest ) ) = 1;
     *( (char *) desth + sizeof( struct ip6_dest ) + 1 ) = optlen - 2;

@@ -42,8 +42,10 @@
  * These should be different between IPv4 and IPv6 but in practice it seems
  * everyone accepts 68 bytes.
  */
-#define MINIMUM_PACKET_SIZE 68
-#define DEFAULT_SRCPORT 44129
+#define MINIMUM_PACKET_SIZE_IPV4 68
+#define MINIMUM_PACKET_SIZE_IPV6 1280
+/* XXX TODO Convert everything to use correct protocol minimum. */
+#define MINIMUM_PACKET_SIZE MINIMUM_PACKET_SIZE_IPV4
 #define ICMP_ID 34254
 
 /* Save time typing/screen real estate. */

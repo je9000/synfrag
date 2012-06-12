@@ -36,7 +36,7 @@ void *append_ipv4_frag2( void *, char *, char *, unsigned char, unsigned short, 
 void *append_ipv4_optioned_frag1( void *, char *, char *, unsigned char, unsigned short, unsigned short );
 void *append_ipv6( void *, char *, char *, unsigned char, unsigned short );
 void *append_frag( void *, unsigned char, unsigned short, unsigned short, int );
-void *append_dest( void *, unsigned char, unsigned char );
+void *append_dest( void *, unsigned char, unsigned int );
 
 #define append_frag_first( buf, proto, fragid ) append_frag( buf, proto, 0, fragid, 1 )
 #define append_frag_last( buf, proto, offset, fragid ) append_frag( buf, proto, offset, fragid, 0 )

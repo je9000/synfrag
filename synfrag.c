@@ -38,6 +38,7 @@
 #include <netinet/in_systm.h>
 #include <ifaddrs.h>
 #include <net/if_dl.h>
+#include <net/if_tap.h>
 #endif
 
 #ifdef __linux
@@ -126,7 +127,7 @@ enum TEST_TYPE test_indexes[] = {
     0
 };
 
-char *test_names[] = {
+const char *test_names[] = {
     "v4-tcp",
     "v4-frag-tcp",
     "v4-frag-icmp",
@@ -145,6 +146,9 @@ char *test_names[] = {
     NULL
 };
 
+/* Globals */
+char *tapname;
+int tapfd = -1;
 pcap_t *pcap;
 pid_t listener_pid;
 int pfd[2];
@@ -261,7 +265,11 @@ void synfrag_send( void *packet, int len )
     printf( "Sending packet %u:\n\n", packets_sent++ );
     print_a_packet( packet, len, 0 );
     putchar( '\n' );
-    if ( pcap_inject( pcap, packet, len ) != len ) errx( 1, "pcap_inject failed: %s", pcap_geterr( pcap ) );
+    if ( tapfd >= 0 ) {
+        if ( write( tapfd, packet, len ) != len ) err( 1, "tap write failed" );
+    } else {
+        if ( pcap_inject( pcap, packet, len ) != len ) errx( 1, "pcap_inject failed: %s", pcap_geterr( pcap ) );
+    }
 }
 
 void print_ethh( struct ether_header *ethh )
@@ -432,7 +440,7 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type )
         }
         print_iph( iph );
         if ( ( ntohs( iph->ip_off ) & 0x1FFF ) || ntohs( iph->ip_off ) & ( 1 << IP_FLAGS_OFFSET ) ) {
-            printf( "(Fragment)\n" );
+            printf( "[ Not parsing data fragment. ]\n" );
             found_type = -1;
             found_header = NULL;
         } else if ( iph->ip_p == IPPROTO_TCP ) {
@@ -1208,7 +1216,7 @@ int harvest_pcap_listener( char **packet_buf ) {
 
 void print_test_types( void )
 {
-    char *test;
+    const char *test;
     int x = 0;
 
     fprintf( stderr, "Available test types:\n\n" );
@@ -1262,15 +1270,16 @@ enum TEST_TYPE parse_args(
     unsigned short *dstport,
     char **dstmac,
     char **interface,
-    char **test_name,
+    const char **test_name,
     long *timeout,
-    int *replay
+    int *replay,
+    int *do_tap
 ) {
     int x = 0;
     int option_index = 0;
     int c, tmpport;
     long tmptime;
-    char *possible_match;
+    const char *possible_match;
     enum TEST_TYPE test_type = 0;
     static struct option long_options[] = {
         {"srcip", required_argument, 0, 0},
@@ -1283,6 +1292,7 @@ enum TEST_TYPE parse_args(
         {"help", no_argument, 0, 0},
         {"timeout", required_argument, 0, 0},
         {"replay", no_argument, 0, 0},
+        {"tap", no_argument, 0, 0},
         {0, 0, 0, 0}
     };
 
@@ -1290,7 +1300,7 @@ enum TEST_TYPE parse_args(
 
     *srcip = *dstip = *dstmac = *interface = NULL;
     *srcport = -1;
-    *dstport = *replay = 0;
+    *dstport = *replay = *do_tap = 0;
 
     while ( 1 ) {
         c = getopt_long(argc, argv, "h", long_options, &option_index);
@@ -1329,6 +1339,9 @@ enum TEST_TYPE parse_args(
         } else if ( strcmp( long_options[option_index].name, "replay" ) == 0 ) {
             *replay = 1;
 
+        } else if ( strcmp( long_options[option_index].name, "tap" ) == 0 ) {
+            *do_tap = 1;
+
         } else if ( strcmp( long_options[option_index].name, "test" ) == 0 ) {
             while ( ( possible_match = test_names[x] ) ) {
                 if ( strcmp( optarg, possible_match ) == 0 ) {
@@ -1345,10 +1358,10 @@ enum TEST_TYPE parse_args(
 
     if ( !*srcip ) errx( 1, "Missing srcip" );
     if ( !*dstip ) errx( 1, "Missing dstip" );
-    if ( !*dstmac ) errx( 1, "Missing dstmac" );
+    if ( !*do_tap && !*dstmac ) errx( 1, "Missing dstmac" );
     if ( !*interface ) errx( 1, "Missing interface" );
     if ( !test_type ) {
-        fprintf( stderr, "Missing or invalid test type.\n" );
+        fprintf( stderr, "Missing or invalid test type\n" );
         print_test_types();
         exit( 1 );
     }
@@ -1358,6 +1371,17 @@ enum TEST_TYPE parse_args(
     }
 
     return test_type;
+}
+
+void tap_cleanup( void )
+{
+    struct ifreq ifr;
+    int s = socket( PF_INET, SOCK_DGRAM, 0 );
+    if ( s < 0 ) err( 1, "socket failed, unable to destroy tap interface %s", tapname );
+    memset( &ifr, 0, sizeof( struct ifreq ) );
+    strncpy( ifr.ifr_name, tapname, sizeof( ifr.ifr_name ) );
+    ioctl( s, SIOCIFDESTROY, &ifr );
+    close( s );
 }
 
 int main( int argc, char **argv )
@@ -1375,11 +1399,12 @@ int main( int argc, char **argv )
     uint16_t srcport;
     uint32_t isn = htonl( rand() );
     char *packet_buf;
-    char *test_name;
+    const char *test_name;
     long receive_timeout = DEFAULT_TIMEOUT_SECONDS;
     int replay;
+    int do_tap;
 
-    test_type = parse_args( argc, argv, &srcip, &dstip, &srcport_param, &dstport, &dstmac, &interface, &test_name, &receive_timeout, &replay );
+    test_type = parse_args( argc, argv, &srcip, &dstip, &srcport_param, &dstport, &dstmac, &interface, &test_name, &receive_timeout, &replay, &do_tap );
     srand( getpid() );
 
     if ( srcport_param == -1 ) {
@@ -1397,8 +1422,36 @@ int main( int argc, char **argv )
     if ( pcap_datalink( pcap ) != DLT_EN10MB )
         errx( 1, "non-ethernet interface specified." );
 
-    if ( ( srcmac = get_interface_mac( interface ) ) == NULL )
-        errx( 1, "Failed to get MAC address for %s", interface );
+    if ( do_tap ) {
+#ifndef __FreeBSD__
+        err( 1, "Tap mode not supported on this OS." );
+#else
+        struct ifreq ifr;
+        int s;
+        tapfd = open( "/dev/tap", O_RDWR );
+        if ( tapfd < 0 ) err( 1, "tap open" );
+        ioctl( tapfd, TAPGIFNAME, &ifr );
+        srcmac = get_interface_mac( ifr.ifr_name );
+        dstmac = strdup( srcmac );
+        if ( dstmac == NULL ) err( 1, "strdup" );
+        tapname = strdup( ifr.ifr_name );
+
+        printf( "Allocated tap interface %s for transmission.\n", tapname );
+
+        s = socket( PF_INET, SOCK_DGRAM, 0 );
+        if ( s < 0 ) err( 1, "socket open" );
+        ioctl( s, SIOCGIFFLAGS, &ifr );
+        strncpy( ifr.ifr_name, tapname, sizeof( ifr.ifr_name ) );
+        ifr.ifr_flags |= IFF_UP;
+        ioctl( s, SIOCSIFFLAGS, &ifr );
+        /* Pick a different src mac from the one on the interface itself. */
+        srcmac[16]++;
+        atexit( tap_cleanup );
+#endif
+    } else {
+        if ( ( srcmac = get_interface_mac( interface ) ) == NULL )
+            errx( 1, "Failed to get MAC address for %s", interface );
+    }
 
     if ( replay ) {
         if ( !get_isn_for_replay( interface, srcip, dstip, dstport, test_type, &isn, &srcport ) ) {

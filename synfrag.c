@@ -1414,8 +1414,6 @@ int main( int argc, char **argv )
         srcport = srcport_param;
     }
 
-    printf( "Starting test \"%s\". Opening interface \"%s\".\n\n", test_name, interface );
-
     if ( ( pcap = pcap_open_live( interface, PCAP_CAPTURE_LEN, 0, 1, pcaperr ) ) == NULL )
         errx( 1, "pcap_open_live failed: %s", pcaperr );
 
@@ -1424,7 +1422,7 @@ int main( int argc, char **argv )
 
     if ( do_tap ) {
 #ifndef __FreeBSD__
-        err( 1, "Tap mode not supported on this OS." );
+        err( 1, "TAP mode not supported on this OS." );
 #else
         struct ifreq ifr;
         int s;
@@ -1436,7 +1434,6 @@ int main( int argc, char **argv )
         if ( dstmac == NULL ) err( 1, "strdup" );
         tapname = strdup( ifr.ifr_name );
 
-        printf( "Allocated tap interface %s for transmission.\n", tapname );
 
         s = socket( PF_INET, SOCK_DGRAM, 0 );
         if ( s < 0 ) err( 1, "socket open" );
@@ -1452,6 +1449,10 @@ int main( int argc, char **argv )
         if ( ( srcmac = get_interface_mac( interface ) ) == NULL )
             errx( 1, "Failed to get MAC address for %s", interface );
     }
+
+    printf( "Starting test \"%s\". Opening interface \"%s\".", test_name, interface );
+    if ( do_tap ) printf( " Allocated TAP interface \"%s\" for transmission.", tapname );
+    printf( "\n\n" );
 
     if ( replay ) {
         if ( !get_isn_for_replay( interface, srcip, dstip, dstport, test_type, &isn, &srcport ) ) {

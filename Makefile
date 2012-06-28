@@ -1,12 +1,14 @@
 OBJS = synfrag.o checksums.o flag_names.o packets.o
 SRCS = $(OBJS,.o=.c)
 CFLAGS += -Wall
+LDFLAGS += -lpcap
+PROGNAME = synfrag
 
-all: synfrag
+all: $(PROGNAME)
 
-synfrag: $(OBJS)
-	$(CC) $(LDFLAGS) -lpcap -o synfrag $(OBJS)
+$(PROGNAME): $(OBJS)
+	$(CC) $(LDFLAGS) -o $(PROGNAME) $(OBJS)
 
 clean:
-	rm -rf $(OBJS) synfrag
+	rm -rf $(OBJS) $(PROGNAME)
 

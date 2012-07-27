@@ -310,13 +310,15 @@ void print_iph( struct ip *iph )
  Protocol: %i (%s)\n\
  Frag Offset: %i (%i bytes)\n\
  Flags: %i (%s)\n\
- Iphl: %i (%i bytes)\n",
+ Iphl: %i (%i bytes)\n\
+ Length: %i (%i counting IP header)\n",
         (char *) &srcbuf,
         (char *) &dstbuf,
         iph->ip_p, ip_protocol_to_name( iph->ip_p ),
         ntohs( iph->ip_off ) & 0x1FFF, ( ntohs( iph->ip_off ) & 0x1FFF ) * FRAGMENT_OFFSET_TO_BYTES,
         ntohs( iph->ip_off ) >> IP_FLAGS_OFFSET, flag_names,
-        iph->ip_hl, iph->ip_hl * 4
+        iph->ip_hl, iph->ip_hl * 4,
+        iph->ip_len, iph->ip_len + iph->ip_hl * 4
     );
     free( flag_names );
 }
@@ -333,11 +335,12 @@ void print_ip6h( struct ip6_hdr *ip6h )
  Src IP: %s\n\
  Dst IP: %s\n\
  Protocol: %i (%s)\n\
- Payload Len: %i\n",
+ Length: %i (%lu counting IP header)\n",
         (char *) &srcbuf,
         (char *) &dstbuf,
         ip6h->ip6_nxt, ip_protocol_to_name( ip6h->ip6_nxt ),
-        ntohs( ip6h->ip6_plen )
+        ntohs( ip6h->ip6_plen ),
+        ntohs( ip6h->ip6_plen ) + SIZEOF_IPV6
     );
 }
 

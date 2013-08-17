@@ -2,13 +2,21 @@
 
 A network scanning tool for sending fragmented IPv4 and IPv6 packets.
 
-=head1 Warning!
+=head1 Synopsis
 
-This version is under development. See:
+Some network devices are unable to filter specially crafted IPv6 packets.
+synfrag can be used to generate some of these packets in order to allow
+administrators to test their firewall configurations.
 
-https://github.com/yahoo/synfrag/tree/
+=head1 Source Locations
 
-for the stable version!
+The main development tree for synfrag can be found at:
+
+https://github.com/jeagle/synfrag
+
+Stable versions will be pushed to:
+
+https://github.com/yahoo/synfrag
 
 =head1 Description
 
@@ -30,7 +38,7 @@ process fragmented packets, exposing hosts to the internet unprotected.
 Some operating systems implement a security mechanism that ignores fragmented
 TCP SYN packets, preventing connections from being established under
 the assumption that these packets are abnormal and specially designed to
-circumvent network protections.  However, many of these operating systems
+circumvent network protections. However, many of these operating systems
 do not implement the same protections for all protocols, allowing some
 fragmented traffic through while blocking others.
 

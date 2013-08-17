@@ -318,7 +318,7 @@ void print_iph( struct ip *iph )
         ntohs( iph->ip_off ) & 0x1FFF, ( ntohs( iph->ip_off ) & 0x1FFF ) * FRAGMENT_OFFSET_TO_BYTES,
         ntohs( iph->ip_off ) >> IP_FLAGS_OFFSET, flag_names,
         iph->ip_hl, iph->ip_hl * 4,
-        iph->ip_len, iph->ip_len + iph->ip_hl * 4
+        ntohs( iph->ip_len ), ntohs( iph->ip_len ) + iph->ip_hl * 4
     );
     free( flag_names );
 }
@@ -695,7 +695,7 @@ int get_isn_for_replay( char *interface, char *srcip, char *dstip, unsigned shor
     tcph = (struct tcphdr *) print_a_packet( (char *) packet_buf, r, IPPROTO_TCP );
     if ( !tcph ) return 0;
     printf( "\nLooks good, sending replay.\n\n" );
-    *isn = tcph->th_seq;
+    *isn = ntohl( tcph->th_seq );
     *srcport = ntohs( tcph->th_sport );
     free( packet_buf );
     return 1;

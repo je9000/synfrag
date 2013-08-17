@@ -8,7 +8,7 @@ This version is under development. See
 
 https://github.com/yahoo/synfrag/tree/
 
-for the latest stable version!
+for the stable version!
 
 =head1 Description
 
@@ -191,7 +191,11 @@ https://github.com/jeagle/synfrag/tree/
 
 =head2 1.2 - 20120628
 
-Under development.
+Add more test types.
+
+Add "--replay" option.
+
+Prettier output.
 
 =head2 1.1 - 20120215
 

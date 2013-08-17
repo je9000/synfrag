@@ -4,7 +4,7 @@ A network scanning tool for sending fragmented IPv4 and IPv6 packets.
 
 =head1 Warning!
 
-This version is under development. See
+This version is under development. See:
 
 https://github.com/yahoo/synfrag/tree/
 
@@ -169,7 +169,7 @@ from libnet, and links against libpcap, also licensed under the BSD license.
 
 =head1 Copyright
 
-Copyright 2012, Yahoo! Inc.  All rights reserved.
+Copyright 2012-2013, Yahoo! Inc.  All rights reserved.
 
 =head1 Author
 
@@ -189,11 +189,14 @@ https://github.com/jeagle/synfrag/tree/
 
 =head1 Changes
 
-=head2 1.2 - 20120628
+=head2 1.2 - 20130816
 
 Add more test types.
 
 Add "--replay" option.
+
+Add ability to transmit on a TAP device, to work around IPv6 pcap/bpf issues on
+FreeBSD.
 
 Prettier output.
 

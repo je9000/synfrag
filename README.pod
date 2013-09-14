@@ -8,16 +8,6 @@ Some network devices are unable to filter specially crafted IPv6 packets.
 synfrag can be used to generate some of these packets in order to allow
 administrators to test their firewall configurations.
 
-=head1 Source Locations
-
-The main development tree for synfrag can be found at:
-
-https://github.com/jeagle/synfrag
-
-Stable versions can be found at:
-
-https://github.com/yahoo/synfrag
-
 =head1 Description
 
 synfrag is a network scanning and penetration testing tool used to craft and
@@ -41,6 +31,10 @@ the assumption that these packets are abnormal and specially designed to
 circumvent network protections. However, many of these operating systems
 do not implement the same protections for all protocols, allowing some
 fragmented traffic through while blocking others.
+
+The author advises network administrators to run all of the tests provided by
+this tool against their network to determine if their firewall is functioning
+as expected.
 
 =head1 Notes
 

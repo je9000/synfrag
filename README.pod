@@ -14,7 +14,7 @@ The main development tree for synfrag can be found at:
 
 https://github.com/jeagle/synfrag
 
-Stable versions will be pushed to:
+Stable versions can be found at:
 
 https://github.com/yahoo/synfrag
 

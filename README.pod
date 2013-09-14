@@ -188,12 +188,12 @@ John Eaglesham
 Source code for stable versions of synfrag are available on Yahoo's github
 account, located at:
 
-https://github.com/yahoo/synfrag/tree/
+https://github.com/yahoo/synfrag/
 
 The current development branch is availble from the author's github tree,
 located at:
 
-https://github.com/jeagle/synfrag/tree/
+https://github.com/jeagle/synfrag/
 
 =head1 Changes
 

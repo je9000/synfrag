@@ -1242,10 +1242,13 @@ void exit_with_usage( void )
     fprintf( stderr, "--timeout    Reply timeout in seconds (defaults to 10).\n" );
     fprintf( stderr, "--replay     Listen for an outgoing TCP SYN packet that matches the specified\n"
                      "             parameters and re-send a duplicate in the test packet format.\n" );
+#ifdef __FreeBSD__
     fprintf( stderr, "--tap        Create a TAP device and transmit the packet on that device, while\n"
                      "             listening on the interface specified by --interface. This is to\n"
                      "             work around an issue on FreeBSD where raw frames can't be sent on\n"
-                     "             FreeBSD GIF(4) devices. Requires IP routing to be enabled.\n\n" );
+                     "             FreeBSD GIF(4) devices. Requires IP routing to be enabled.\n" );
+#endif
+    fprintf( stderr, "\n" );
     print_test_types();
     fprintf( stderr, "\nAll TCP tests send syn packets, all ICMP/6 test send ping.\n" );
     fprintf( stderr, "All \"frag\" tests send fragments that are below the minimum packet size.\n" );
@@ -1380,6 +1383,7 @@ enum TEST_TYPE parse_args(
     return test_type;
 }
 
+#ifdef __FreeBSD__
 void tap_cleanup( void )
 {
     struct ifreq ifr;
@@ -1390,6 +1394,7 @@ void tap_cleanup( void )
     ioctl( s, SIOCIFDESTROY, &ifr );
     close( s );
 }
+#endif
 
 int main( int argc, char **argv )
 {

@@ -191,6 +191,10 @@ https://github.com/jeagle/synfrag/
 
 =head1 Changes
 
+=head2 1.3 - 20140107
+
+Build and run on OSX.
+
 =head2 1.2 - 20130816
 
 Add more test types.

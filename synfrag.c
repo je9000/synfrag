@@ -27,6 +27,10 @@
 
 #define __USE_BSD
 
+#ifdef __FreeBSD__
+#define DO_TAP
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -34,10 +38,13 @@
 #include <string.h>
 #include <netdb.h>
 
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__) || ( defined(__APPLE__) && defined(__MACH__) )
 #include <netinet/in_systm.h>
 #include <ifaddrs.h>
 #include <net/if_dl.h>
+#endif
+
+#ifdef DO_TAP
 #include <net/if_tap.h>
 #endif
 
@@ -184,7 +191,7 @@ char *get_interface_mac( char *interface )
     );
     return dest;
 }
-#elif __FreeBSD__
+#elif defined(__FreeBSD__) || ( defined(__APPLE__) && defined(__MACH__) )
 char *get_interface_mac( char *interface )
 {
     struct ifaddrs *ifap;
@@ -1242,7 +1249,7 @@ void exit_with_usage( void )
     fprintf( stderr, "--timeout    Reply timeout in seconds (defaults to 10).\n" );
     fprintf( stderr, "--replay     Listen for an outgoing TCP SYN packet that matches the specified\n"
                      "             parameters and re-send a duplicate in the test packet format.\n" );
-#ifdef __FreeBSD__
+#ifdef DO_TAP
     fprintf( stderr, "--tap        Create a TAP device and transmit the packet on that device, while\n"
                      "             listening on the interface specified by --interface. This is to\n"
                      "             work around an issue on FreeBSD where raw frames can't be sent on\n"
@@ -1383,7 +1390,7 @@ enum TEST_TYPE parse_args(
     return test_type;
 }
 
-#ifdef __FreeBSD__
+#ifdef DO_TAP
 void tap_cleanup( void )
 {
     struct ifreq ifr;
@@ -1433,7 +1440,7 @@ int main( int argc, char **argv )
         errx( 1, "non-ethernet interface specified." );
 
     if ( do_tap ) {
-#ifndef __FreeBSD__
+#ifndef DO_TAP
         err( 1, "TAP mode not supported on this OS." );
 #else
         struct ifreq ifr;

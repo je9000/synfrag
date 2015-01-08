@@ -1,0 +1,130 @@
+#!/usr/bin/perl
+
+# Copyright (c) 2015, John Eaglesham
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#     Redistributions of source code must retain the above copyright notice,
+#     this list of conditions and the following disclaimer.  Redistributions
+#     in binary form must reproduce the above copyright notice, this list
+#     of conditions and the following disclaimer in the documentation and/or
+#     other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS
+# BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+# OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+# THE POSSIBILITY OF SUCH DAMAGE.
+
+use strict;
+use warnings;
+use Getopt::Long;
+use Socket qw/IPPROTO_TCP AF_INET AF_INET6/;
+
+sub die_usage {
+    warn <<"USAGE";
+Synopsis:
+ Run synfrag and automatically figure out some arguments
+
+ synfrag requires users to manually configure the source interface, source ip
+ address, destination ip address, and destination or router mac address. This
+ program automates those tasks.
+
+Example:
+ ./sf -d example.com --test v4-tcp --dstport 80
+
+ Will be converted into:
+
+ ./synfrag --srcip 1.1.1.1 --interface eth0 --dstip 2.2.2.2 --dstmac \
+  00:11:22:33:44:55 --test v4-tcp --dstport 80
+
+Arguments:
+ -d <target>  Target hostname or address.
+
+Note:
+ All arguments not specified here are passed directly to synfrag. Run synfrag
+ for a complete argument list.
+
+USAGE
+    exit(4);
+};
+
+my %config;
+Getopt::Long::Configure('pass_through');
+GetOptions( \%config, 'd=s', 'test=s', 'help|h' ) || die_usage();
+if ( $config{help} || !$config{d} || !$config{test}) { die_usage(); }
+
+my $family = $config{test} =~ /^v6-/ ? AF_INET6 : AF_INET;
+my $target;
+my $gateway;
+my $interface;
+my $target_mac;
+my $source;
+
+if ( Socket::inet_pton( $family, $config{d} ) ) {
+    $target = $config{d};
+} else {
+    my ( $err, @addrs ) = Socket::getaddrinfo( $config{d}, undef, { family => $family, protocol => IPPROTO_TCP } );
+
+    if ( !@addrs ) {
+        die "Unable to resolve $config{d}, aborting.\n";
+    }
+
+    if ( $family == AF_INET6 ) {
+        ( undef, $target ) = Socket::unpack_sockaddr_in6( $addrs[0]->{'addr'} )
+    } elsif ( $family == AF_INET ) {
+        ( undef, $target ) = Socket::unpack_sockaddr_in( $addrs[0]->{'addr'} )
+    } else {
+        die;
+    }
+    $target = Socket::inet_ntop( $family, $target );
+}
+
+print "sf: Resolved $config{d} to $target\n";
+
+if ( $^O =~ /(?:^darwin|bsd)$/ ) {
+    my $f = $family == AF_INET6 ? '-inet6' : '';
+    my $route_get = `route get $f $target`;
+    ( $gateway ) = $route_get =~ /^\s*gateway: (\S+)/m;
+    ( $interface ) = $route_get =~ /^\s*interface: (\S+)/m;
+} elsif ( $^O eq 'linux' ) {
+    if ( $family == AF_INET ) {
+
+    } elsif ( $family == AF_INET6 ) {
+
+    } else {
+        die;
+    }
+} else {
+    die "Unsupported platform, please run synfrag directly.\n";
+}
+
+my $arp_out = `arp -n $gateway`;
+( $target_mac ) = $arp_out =~ / at ([a-fA-F0-9:]+)/;
+if ( !$target_mac ) {
+    `ping -q -c 1 $gateway`;
+    $arp_out = `arp -n $gateway`;
+    ( $target_mac ) = $arp_out =~ / at ([a-fA-F0-9:]+)/;
+}
+if ( !$target_mac ) {
+    die "Unable to get destination MAC address, please run synfrag manually.\n";
+}
+$target_mac =~ s/:0:/:00:/g;
+$target_mac =~ s/:0$/:00/g;
+$target_mac =~ s/^0:/00:/g;
+
+my $ifconfig_out = `ifconfig $interface`;
+( $source ) = $ifconfig_out =~ /inet ([\d\.]+)/;
+
+my @cmd = ( './synfrag', '--dstip', $target, '--srcip', $source, '--dstmac', $target_mac, '--interface', $interface, '--test', $config{test}, @ARGV );
+local $@ = ' ';
+print "sf: Running command: @cmd\n\n";
+exec { $cmd[0] } @cmd;
+

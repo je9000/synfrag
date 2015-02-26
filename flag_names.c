@@ -84,7 +84,7 @@ char *ip_flags_to_names( unsigned char flags )
  * The following functions return static strings, the user should not call
  * free() on the returned pointer.
  */
-char *icmp6_type_to_name( unsigned char type )
+const char *icmp6_type_to_name( unsigned char type )
 {
     if ( type == 1 ) return "Destination unreachable";
     if ( type == 2 ) return "Packet too big";
@@ -116,7 +116,7 @@ char *icmp6_type_to_name( unsigned char type )
 }
 
 
-char *icmp6_code_to_name( unsigned char type, unsigned char code )
+const char *icmp6_code_to_name( unsigned char type, unsigned char code )
 {
     if ( type == 1 ) {
         if ( code == 0 ) return "No route to destination";
@@ -146,7 +146,7 @@ char *icmp6_code_to_name( unsigned char type, unsigned char code )
     return "Unassigned";
 }
 
-char *icmp_type_to_name( unsigned char type )
+const char *icmp_type_to_name( unsigned char type )
 {
     if ( type == 0 ) return "Echo Reply";
     if ( type == 3 ) return "Destination Unreachable";
@@ -180,7 +180,7 @@ char *icmp_type_to_name( unsigned char type )
     return "Unassigned";
 }
 
-char *icmp_code_to_name( unsigned char type, unsigned char code )
+const char *icmp_code_to_name( unsigned char type, unsigned char code )
 {
     if ( type == 3 ) {
         if ( code == 0 ) return "Net Unreachable";
@@ -233,7 +233,7 @@ char *icmp_code_to_name( unsigned char type, unsigned char code )
     return "Unassigned";
 }
 
-char *ip_protocol_to_name( unsigned char protocol )
+const char *ip_protocol_to_name( unsigned char protocol )
 {
     if ( protocol == 0 ) return "IPPROTO_IP";
     if ( protocol == 1 ) return "IPPROTO_ICMP";
@@ -347,7 +347,7 @@ char *ip_protocol_to_name( unsigned char protocol )
     return "Unassigned";
 }
 
-char *ether_protocol_to_name( unsigned short protocol )
+const char *ether_protocol_to_name( unsigned short protocol )
 {
     if ( protocol == 0x0004 ) return "ETHERTYPE_8023";
     if ( protocol == 0x0200 ) return "ETHERTYPE_PUP";

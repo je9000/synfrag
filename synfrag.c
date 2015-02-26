@@ -1436,8 +1436,10 @@ int main( int argc, char **argv )
     if ( ( pcap = pcap_open_live( interface, PCAP_CAPTURE_LEN, 0, 1, pcaperr ) ) == NULL )
         errx( 1, "pcap_open_live failed: %s", pcaperr );
 
-    if ( pcap_datalink( pcap ) != DLT_EN10MB )
-        errx( 1, "non-ethernet interface specified." );
+    r = pcap_datalink( pcap );
+    if ( r != DLT_EN10MB && ( r != DLT_NULL && !do_tap ) ) {
+        errx( 1, "unsupported interface type specified (%i).", r );
+    }
 
     if ( do_tap ) {
 #ifndef DO_TAP
@@ -1453,16 +1455,18 @@ int main( int argc, char **argv )
         if ( dstmac == NULL ) err( 1, "strdup" );
         tapname = strdup( ifr.ifr_name );
 
-
         s = socket( PF_INET, SOCK_DGRAM, 0 );
         if ( s < 0 ) err( 1, "socket open" );
         ioctl( s, SIOCGIFFLAGS, &ifr );
         strncpy( ifr.ifr_name, tapname, sizeof( ifr.ifr_name ) );
         ifr.ifr_flags |= IFF_UP;
         ioctl( s, SIOCSIFFLAGS, &ifr );
+
         /* Pick a different src mac from the one on the interface itself. */
-        srcmac[16]++;
+        srcmac = "00:00:5E:00:53:40";
+
         atexit( tap_cleanup );
+        close( s );
 #endif
     } else {
         if ( ( srcmac = get_interface_mac( interface ) ) == NULL )

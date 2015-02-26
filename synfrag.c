@@ -159,6 +159,7 @@ int tapfd = -1;
 pcap_t *pcap;
 pid_t listener_pid;
 int pfd[2];
+int interface_type;
 
 #ifdef SIOCGIFHWADDR
 char *get_interface_mac( char *interface )
@@ -1436,9 +1437,9 @@ int main( int argc, char **argv )
     if ( ( pcap = pcap_open_live( interface, PCAP_CAPTURE_LEN, 0, 1, pcaperr ) ) == NULL )
         errx( 1, "pcap_open_live failed: %s", pcaperr );
 
-    r = pcap_datalink( pcap );
-    if ( r != DLT_EN10MB && ( r != DLT_NULL && !do_tap ) ) {
-        errx( 1, "unsupported interface type specified (%i).", r );
+    interface_type = pcap_datalink( pcap );
+    if ( interface_type != DLT_EN10MB && ( interface_type != DLT_NULL && !do_tap ) ) {
+        errx( 1, "unsupported interface type specified (%i).", interface_type );
     }
 
     if ( do_tap ) {
@@ -1450,8 +1451,8 @@ int main( int argc, char **argv )
         tapfd = open( "/dev/tap", O_RDWR );
         if ( tapfd < 0 ) err( 1, "tap open" );
         ioctl( tapfd, TAPGIFNAME, &ifr );
-        srcmac = get_interface_mac( ifr.ifr_name );
-        dstmac = strdup( srcmac );
+        dstmac = get_interface_mac( ifr.ifr_name );
+        srcmac = "00:00:5E:00:53:40"; /* Make up a source. */
         if ( dstmac == NULL ) err( 1, "strdup" );
         tapname = strdup( ifr.ifr_name );
 
@@ -1461,9 +1462,6 @@ int main( int argc, char **argv )
         strncpy( ifr.ifr_name, tapname, sizeof( ifr.ifr_name ) );
         ifr.ifr_flags |= IFF_UP;
         ioctl( s, SIOCSIFFLAGS, &ifr );
-
-        /* Pick a different src mac from the one on the interface itself. */
-        srcmac = "00:00:5E:00:53:40";
 
         atexit( tap_cleanup );
         close( s );

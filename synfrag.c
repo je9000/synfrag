@@ -431,7 +431,6 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type, in
 {
     struct ip *iph;
     struct ip6_hdr *ip6h;
-    size_t s = SIZEOF_ETHER;
     struct ether_header *ethh = (struct ether_header *) packet_data;
     uint32_t *nullh = (uint32_t *) packet_data;
     int found_type = -1;
@@ -449,7 +448,6 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type, in
         ether_type = ntohs( ethh->ether_type );
         wire_offset = SIZEOF_ETHER;
     } else if ( interface_type == DLT_NULL ) {
-        print_ethh(ethh);
         if ( nullh[0] == PF_INET ) {
             ether_type = ETHERTYPE_IP;
         } else if ( nullh[0] == PF_INET6 ) {
@@ -463,6 +461,7 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type, in
     }
 
     if ( ether_type == ETHERTYPE_IP ) {
+        size_t s = wire_offset;
         iph = (struct ip *) ( packet_data + wire_offset );
         s += ( iph->ip_hl * 4 );
         if ( s > len ) {
@@ -498,6 +497,7 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type, in
     } else if ( ether_type == ETHERTYPE_IPV6 ) {
         int ipv6_next_header_type = IPPROTO_IPV6;
         int depth = 0;
+        size_t s = wire_offset;
 
         while( 1 ) {
             if ( depth >= 20 ) {

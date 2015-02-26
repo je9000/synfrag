@@ -266,12 +266,12 @@ void calc_checksum( void *iph, int protocol, int len )
  * of the code this way, and until I do this out of place function definition
  * will work okay.
  */
-char *print_a_packet( char *, int, unsigned short );
+char *print_a_packet( char *, int, unsigned short, int );
 void synfrag_send( void *packet, int len )
 {
     static unsigned int packets_sent = 1;
     printf( "Sending packet %u:\n\n", packets_sent++ );
-    print_a_packet( packet, len, 0 );
+    print_a_packet( packet, len, 0, 1 );
     putchar( '\n' );
     if ( tapfd >= 0 ) {
         if ( write( tapfd, packet, len ) != len ) err( 1, "tap write failed" );
@@ -427,23 +427,43 @@ void print_dstopth( struct ip6_dest *desth )
 }
 
 /* Returns the layer 4 header if we found one. */
-char *print_a_packet( char *packet_data, int len, unsigned short wanted_type )
+char *print_a_packet( char *packet_data, int len, unsigned short wanted_type, int sent )
 {
     struct ip *iph;
     struct ip6_hdr *ip6h;
     size_t s = SIZEOF_ETHER;
     struct ether_header *ethh = (struct ether_header *) packet_data;
+    uint32_t *nullh = (uint32_t *) packet_data;
     int found_type = -1;
     char *found_header = NULL;
+    unsigned short ether_type;
+    size_t wire_offset;
 
     if ( len < SIZEOF_ETHER ) {
         printf( "Ethernet Frame: \nToo short\n" );
         return NULL;
     }
-    print_ethh( ethh );
 
-    if ( ntohs( ethh->ether_type ) == ETHERTYPE_IP ) {
-        iph = (struct ip *) ( packet_data + SIZEOF_ETHER );
+    if ( interface_type == DLT_EN10MB || sent ) {
+        print_ethh( ethh );
+        ether_type = ntohs( ethh->ether_type );
+        wire_offset = SIZEOF_ETHER;
+    } else if ( interface_type == DLT_NULL ) {
+        print_ethh(ethh);
+        if ( nullh[0] == PF_INET ) {
+            ether_type = ETHERTYPE_IP;
+        } else if ( nullh[0] == PF_INET6 ) {
+            ether_type = ETHERTYPE_IPV6;
+        } else {
+            errx(1, "unsupported protocol %u", nullh[0]);
+        }
+        wire_offset = 4;
+    } else {
+        errx(1, "unknown interface type");
+    }
+
+    if ( ether_type == ETHERTYPE_IP ) {
+        iph = (struct ip *) ( packet_data + wire_offset );
         s += ( iph->ip_hl * 4 );
         if ( s > len ) {
             printf( "IPv4 Header:\n Too short\n" );
@@ -475,7 +495,7 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type )
             return NULL;
         }
 
-    } else if ( ntohs( ethh->ether_type ) == ETHERTYPE_IPV6 ) {
+    } else if ( ether_type == ETHERTYPE_IPV6 ) {
         int ipv6_next_header_type = IPPROTO_IPV6;
         int depth = 0;
 
@@ -485,7 +505,7 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type )
                 return NULL;
             }
             if ( ipv6_next_header_type == IPPROTO_IPV6 ) {
-                ip6h = (struct ip6_hdr *) ( packet_data + SIZEOF_ETHER );
+                ip6h = (struct ip6_hdr *) ( packet_data + wire_offset );
                 s += SIZEOF_IPV6;
                 if ( s > len ) {
                     printf( "IPv6 Header:\n Too short\n" );
@@ -567,8 +587,8 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type )
 
     } else { /* ETHERTYPE_IPV6 */
         printf( "Unsupported Protocol:\n Ethertype: %i (%s)\n",
-            ntohs( ethh->ether_type ),
-            ether_protocol_to_name( ethh->ether_type )
+            ether_type,
+            ether_protocol_to_name( ether_type )
         );
         return NULL;
     }
@@ -700,7 +720,7 @@ int get_isn_for_replay( char *interface, char *srcip, char *dstip, unsigned shor
     r = receive_a_packet( filter_str, &packet_buf, 0, 0 );
     if ( !r ) return 0;
     printf( "Found a matching outgoing TCP SYN:\n\n" );
-    tcph = (struct tcphdr *) print_a_packet( (char *) packet_buf, r, IPPROTO_TCP );
+    tcph = (struct tcphdr *) print_a_packet( (char *) packet_buf, r, IPPROTO_TCP, 0 );
     if ( !tcph ) return 0;
     printf( "\nLooks good, sending replay.\n\n" );
     *isn = ntohl( tcph->th_seq );
@@ -718,15 +738,15 @@ int check_received_packet( int buf_len, char *packet_buf, enum TEST_TYPE test_ty
     printf( "Received packet 1:\n\n" );
 
     if ( IS_TEST_IPV4( test_type ) && IS_TEST_ICMP( test_type ) ) {
-        icmph = (struct icmp *) print_a_packet( (char *) received_packet_data, buf_len, IPPROTO_ICMP );
+        icmph = (struct icmp *) print_a_packet( (char *) received_packet_data, buf_len, IPPROTO_ICMP, 0 );
         if ( !icmph ) return 0;
         if ( icmph->icmp_type == ICMP_ECHOREPLY && icmph->icmp_id == htons( ICMP_ID ) ) return 1;
     } else if ( IS_TEST_IPV6( test_type ) && IS_TEST_ICMP( test_type ) ) {
-        icmp6h = (struct icmp6_hdr *) print_a_packet( (char *) received_packet_data, buf_len, IPPROTO_ICMPV6 );
+        icmp6h = (struct icmp6_hdr *) print_a_packet( (char *) received_packet_data, buf_len, IPPROTO_ICMPV6, 0 );
         if ( !icmp6h ) return 0;
         if ( icmp6h->icmp6_type == ICMP6_ECHO_REPLY && icmp6h->icmp6_id == htons( ICMP_ID ) ) return 1;
     } else { /* Assume pcap picked the right address family for our packet. */
-        tcph = (struct tcphdr *) print_a_packet( (char *) received_packet_data, buf_len, IPPROTO_TCP );
+        tcph = (struct tcphdr *) print_a_packet( (char *) received_packet_data, buf_len, IPPROTO_TCP, 0 );
         if ( !tcph ) return 0;
         if ( ( tcph->th_flags & ( TH_SYN|TH_ACK ) ) && !( tcph->th_flags & TH_RST ) ) {
             return 1;

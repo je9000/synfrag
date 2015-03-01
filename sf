@@ -93,35 +93,51 @@ if ( $^O =~ /(?:^darwin|bsd)$/ ) {
     my $f = $family == AF_INET6 ? '-inet6' : '';
     my $route_get = `route get $f $target`;
     ( $gateway ) = $route_get =~ /^\s*gateway: (\S+)/m;
+    if ( !$gateway ) { $gateway = $target; }
     ( $interface ) = $route_get =~ /^\s*interface: (\S+)/m;
 } elsif ( $^O eq 'linux' ) {
-    if ( $family == AF_INET ) {
-
-    } elsif ( $family == AF_INET6 ) {
-
-    } else {
-        die;
-    }
+    my $f = $family == AF_INET6 ? '-f inet6' : '';
+    my $ip_route = `ip $f route get $target`;
+    ( $gateway ) = $ip_route =~ / via (\S+) /;
 } else {
     die "Unsupported platform, please run synfrag directly.\n";
 }
 
-my $arp_out = `arp -n $gateway`;
-( $target_mac ) = $arp_out =~ / at ([a-fA-F0-9:]+)/;
-if ( !$target_mac ) {
-    `ping -q -c 1 $gateway`;
-    $arp_out = `arp -n $gateway`;
+if ( $family == AF_INET ) {
+    my $arp_out = `arp -n $gateway`;
     ( $target_mac ) = $arp_out =~ / at ([a-fA-F0-9:]+)/;
-}
-if ( !$target_mac ) {
-    die "Unable to get destination MAC address, please run synfrag manually.\n";
-}
-$target_mac =~ s/:0:/:00:/g;
-$target_mac =~ s/:0$/:00/g;
-$target_mac =~ s/^0:/00:/g;
+    if ( !$target_mac ) {
+        `ping -q -c 1 $gateway`;
+        $arp_out = `arp -n $gateway`;
+        ( $target_mac ) = $arp_out =~ / at ([a-fA-F0-9:]+)/;
+    }
+    if ( !$target_mac ) {
+        die "Unable to get destination MAC address, please run synfrag manually.\n";
+    }
+    $target_mac =~ s/:0:/:00:/g;
+    $target_mac =~ s/:0$/:00/g;
+    $target_mac =~ s/^0:/00:/g;
 
-my $ifconfig_out = `ifconfig $interface`;
-( $source ) = $ifconfig_out =~ /inet ([\d\.]+)/;
+    my $ifconfig_out = `ifconfig $interface`;
+    ( $source ) = $ifconfig_out =~ /inet ([\d\.]+)/;
+} else {
+    my $ndp_out = `ndp -n $gateway`;
+    ( $target_mac ) = $ndp_out =~ /^\S+\s+([a-fA-F0-9:]+)\s/m;
+    if ( !$target_mac ) {
+        `ping6 -q -c 1 $gateway`;
+        $ndp_out = `ndp -n $gateway`;
+        ( $target_mac ) = $ndp_out =~ /^\S+\s+([a-fA-F0-9:]+)\s/m;
+    }
+    if ( !$target_mac ) {
+        die "Unable to get destination MAC address, please run synfrag manually.\n";
+    }
+    $target_mac =~ s/:0:/:00:/g;
+    $target_mac =~ s/:0$/:00/g;
+    $target_mac =~ s/^0:/00:/g;
+
+    my $ifconfig_out = `ifconfig $interface`;
+    ( $source ) = $ifconfig_out =~ /inet6 ([a-fA-F\d:]+)/;
+}
 
 my @cmd = ( './synfrag', '--dstip', $target, '--srcip', $source, '--dstmac', $target_mac, '--interface', $interface, '--test', $config{test}, @ARGV );
 local $@ = ' ';

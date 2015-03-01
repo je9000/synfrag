@@ -1422,6 +1422,11 @@ void tap_cleanup( void )
     ioctl( s, SIOCIFDESTROY, &ifr );
     close( s );
 }
+
+void handle_sigint( int dummy ) {
+    tap_cleanup();
+    exit(1);
+}
 #endif
 
 int main( int argc, char **argv )
@@ -1485,6 +1490,8 @@ int main( int argc, char **argv )
 
         atexit( tap_cleanup );
         close( s );
+
+        signal( SIGINT, handle_sigint );
 #endif
     } else {
         if ( ( srcmac = get_interface_mac( interface ) ) == NULL )

@@ -469,13 +469,14 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type, in
             return NULL;
         }
         print_iph( iph );
+        // If this packet is a fragment (ie, has an offset) or has more fragments following...
         if ( ( ntohs( iph->ip_off ) & 0x1FFF ) || ntohs( iph->ip_off ) & ( 1 << IP_FLAGS_OFFSET ) ) {
             printf( "[ Not parsing data fragment. ]\n" );
             found_type = -1;
             found_header = NULL;
         } else if ( iph->ip_p == IPPROTO_TCP ) {
             if ( s + SIZEOF_TCP > len ) {
-                printf( "TCP Header:\n Too short\n" );
+                printf( "TCP Header:\n Too short. Got %lu bytes, expected %lu\n", len - s, SIZEOF_TCP );
                 return NULL;
             }
             print_tcph( (struct tcphdr *) ( packet_data + s ) );
@@ -508,14 +509,14 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type, in
                 ip6h = (struct ip6_hdr *) ( packet_data + wire_offset );
                 s += SIZEOF_IPV6;
                 if ( s > len ) {
-                    printf( "IPv6 Header:\n Too short\n" );
+                    printf( "IPv6 Header:\n Too short. Got %lu bytes, expected %lu\n", len - s, SIZEOF_IPV6 );
                     return NULL;
                 }
                 print_ip6h( ip6h );
                 ipv6_next_header_type = ip6h->ip6_nxt;
             } else if ( ipv6_next_header_type == IPPROTO_TCP ) {
                 if ( s + SIZEOF_TCP > len ) {
-                    printf( "TCP Header:\n Too short\n" );
+                    printf( "TCP Header:\n Too short. Got %lu bytes, expected %lu\n", len - s, SIZEOF_TCP );
                     return NULL;
                 }
                 print_tcph( (struct tcphdr *) ( packet_data + s ) );
@@ -525,7 +526,7 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type, in
                 break;
             } else if ( ipv6_next_header_type == IPPROTO_ICMPV6 ) {
                 if ( s + SIZEOF_ICMP6 > len ) {
-                    printf( "ICMP6 Header:\n Too short\n" );
+                    printf( "ICMP6 Header:\n Too short. Got %lu bytes, expected %lu\n", len - s, SIZEOF_ICMP6 );
                     return NULL;
                 }
                 print_icmp6h( (struct icmp6_hdr *) ( packet_data + s ) );
@@ -535,7 +536,7 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type, in
                 break;
             } else if ( ipv6_next_header_type == IPPROTO_FRAGMENT ) {
                 if ( s + SIZEOF_FRAG > len ) {
-                    printf( "Fragment Header:\n Too short\n" );
+                    printf( "Fragment Header:\n Too short. Got %lu bytes, expected %lu\n", len - s, SIZEOF_FRAG );
                     return NULL;
                 }
                 print_fragh( (struct ip6_frag *) ( packet_data + s ) );
@@ -554,7 +555,7 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type, in
                  * again to see if we have the complete header.
                  */
                 if ( s + SIZEOF_DESTOPT > len ) {
-                    printf( "Destination Options Header:\n Too short\n" );
+                    printf( "Destination Options Header:\n Too short. Got %lu bytes, expected %lu\n", len - s, SIZEOF_DESTOPT );
                     return NULL;
                 }
                 if ( 
@@ -1147,8 +1148,8 @@ void do_ipv6_frag_frag_tcp( char *interface, char *srcip, char *dstip, char *src
     next = append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
     next = append_ipv6( next, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_FRAG + SIZEOF_FRAG );
     next = append_frag_first( next, IPPROTO_FRAGMENT, fragid );
-    next = append_frag( next, IPPROTO_FRAGMENT, 0, fragid + 1, 0 );
-    next = append_frag( next, IPPROTO_TCP, 0, fragid + 2, 0 );
+    next = append_frag( next, IPPROTO_FRAGMENT, 0, fragid + 1, 1 );
+    next = append_frag( next, IPPROTO_TCP, SIZEOF_FRAG, fragid + 2, 1 );
     append_tcp_syn( next, srcport, dstport, isn );
     calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
@@ -1157,7 +1158,7 @@ void do_ipv6_frag_frag_tcp( char *interface, char *srcip, char *dstip, char *src
     packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + SIZEOF_FRAG + SIZEOF_TCP;
 
     next = append_ipv6( ip6h, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_TCP );
-    append_frag_last( next, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_FRAG, fragid );
+    append_frag_last( next, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_FRAG, fragid + 3 );
     memmove( tcph, tcph_optioned, SIZEOF_TCP );
 
     synfrag_send( ethh, packet_size );

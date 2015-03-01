@@ -1263,7 +1263,7 @@ void exit_with_usage( void )
     fprintf( stderr, "--help | -h  This message.\n" );
     fprintf( stderr, "--srcip      Source IP address (this host).\n" );
     fprintf( stderr, "--dstip      Destination IP address (target).\n" );
-    fprintf( stderr, "--srcport    Source port for TCP tests.\n" );
+    fprintf( stderr, "--srcport    Source port for TCP tests (defaults to rand()).\n" );
     fprintf( stderr, "--dstport    Destination port for TCP tests.\n" );
     fprintf( stderr, "--dstmac     Destination MAC address (default gw or target host if on subnet).\n" );
     fprintf( stderr, "--interface  Packet source interface.\n" );
@@ -1275,7 +1275,7 @@ void exit_with_usage( void )
     fprintf( stderr, "--tap        Create a TAP device and transmit the packet on that device, while\n"
                      "             listening on the interface specified by --interface. This is to\n"
                      "             work around an issue on FreeBSD where raw frames can't be sent on\n"
-                     "             FreeBSD GIF(4) devices. Requires IP routing to be enabled.\n" );
+                     "             FreeBSD gif(4) devices. Requires IP/IPv6 routing to be enabled.\n" );
 #endif
     fprintf( stderr, "\n" );
     print_test_types();

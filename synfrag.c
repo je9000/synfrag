@@ -104,7 +104,9 @@ enum TEST_TYPE {
     TEST_IPV6_FRAG_DSTOPT_TCP = 17,
     TEST_IPV6_FRAG_FRAG_TCP = 19,
     TEST_IPV6_FRAG_NOMORE_TCP = 21,
-    TEST_IPV6_BIG_DSTOPT_TCP = 23,
+    TEST_IPV6_MANY_FRAG_NOMORE_TCP = 23,
+    TEST_IPV6_BIG_DSTOPT_TCP = 25,
+    TEST_IPV6_SMALL_DSTOPT_TCP = 27,
 
     TEST_IPV6_FRAG_ICMP6 = 12,
     TEST_IPV6_DSTOPT_FRAG_ICMP6 = 14,
@@ -130,7 +132,9 @@ enum TEST_TYPE test_indexes[] = {
     TEST_IPV6_FRAG_DSTOPT_TCP,
     TEST_IPV6_FRAG_FRAG_TCP,
     TEST_IPV6_FRAG_NOMORE_TCP,
+    TEST_IPV6_MANY_FRAG_NOMORE_TCP,
     TEST_IPV6_BIG_DSTOPT_TCP,
+    TEST_IPV6_SMALL_DSTOPT_TCP,
     TEST_IPV6_DSTOPT_FRAG_ICMP6,
 
     0
@@ -150,7 +154,9 @@ const char *test_names[] = {
     "v6-frag-dstopt-tcp",
     "v6-frag-frag-tcp",
     "v6-frag-nomore-tcp",
+    "v6-many-frag-nomore-tcp",
     "v6-big-dstopt-tcp",
+    "v6-small-dstopt-tcp",
     "v6-dstopt-frag-icmp6",
 
     NULL
@@ -1059,9 +1065,7 @@ void do_ipv6_dstopt_frag_tcp( char *interface, char *srcip, char *dstip, char *s
     void *next;
     int packet_size;
     unsigned short fragid = rand();
-    unsigned short optlen = fix_up_destination_options_length(
-        MINIMUM_PACKET_SIZE - SIZEOF_IPV6 - SIZEOF_DESTOPT - SIZEOF_FRAG - MINIMUM_FRAGMENT_SIZE
-    );
+    unsigned short optlen = 6;
 
     packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + SIZEOF_DESTOPT + optlen + SIZEOF_FRAG + MINIMUM_FRAGMENT_SIZE;
 
@@ -1102,11 +1106,9 @@ void do_ipv6_frag_dstopt_tcp( char *interface, char *srcip, char *dstip, char *s
      */
     const int DSTOPT_OVERFLOW = 8;
     unsigned short fragid = rand();
-    unsigned short optlen = fix_up_destination_options_length(
-        MINIMUM_PACKET_SIZE - SIZEOF_IPV6 - SIZEOF_DESTOPT - SIZEOF_FRAG + DSTOPT_OVERFLOW
-    );
+    unsigned short optlen = 6;
 
-    packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + SIZEOF_FRAG + SIZEOF_DESTOPT + optlen - DSTOPT_OVERFLOW;
+    packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + SIZEOF_FRAG + SIZEOF_DESTOPT + optlen;
 
     ethh = (struct ether_header *) malloc_check( BIG_PACKET_SIZE );
     ip6h = (struct ip6_hdr *) ( (char *) ethh + SIZEOF_ETHER );
@@ -1193,20 +1195,45 @@ void do_ipv6_frag_nomore_tcp( char *interface, char *srcip, char *dstip, char *s
     free( ethh );
 }
 
-void do_ipv6_big_dstopt( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short srcport, unsigned short dstport, uint32_t isn )
+void do_ipv6_many_frag_nomore_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short srcport, unsigned short dstport, uint32_t isn )
+{
+    struct ip6_hdr *ip6h;
+    struct tcphdr *tcph;
+    struct ether_header *ethh;
+    int packet_size;
+    void *next;
+    const int frag_headers = 10; // Must be >= 1!
+
+    packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + ( SIZEOF_FRAG * frag_headers ) + SIZEOF_TCP;
+
+    ethh = (struct ether_header *) malloc_check( BIG_PACKET_SIZE );
+    ip6h = (struct ip6_hdr *) ( (char *) ethh + SIZEOF_ETHER );
+    tcph = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + ( SIZEOF_FRAG * frag_headers ) );
+
+    next = append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
+    next = append_ipv6( next, srcip, dstip, IPPROTO_FRAGMENT, ( SIZEOF_FRAG * frag_headers ) + SIZEOF_TCP );
+    for ( int x = 0; x < frag_headers - 1; x++ ) {
+        next = append_frag_last( next, IPPROTO_FRAGMENT, 0, rand() );
+    }
+    next = append_frag_last( next, IPPROTO_TCP, 0, rand() );
+    append_tcp_syn( next, srcport, dstport, isn );
+    calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
+
+    synfrag_send( ethh, packet_size );
+    free( ethh );
+}
+
+#define do_ipv6_big_dstopt( a, b, c, d, e, f, g, h ) do_ipv6_sized_dstopt( a, b, c, d, e, f, g, h, 512 )
+#define do_ipv6_small_dstopt( a, b, c, d, e, f, g, h ) do_ipv6_sized_dstopt( a, b, c, d, e, f, g, h, 6 )
+
+void do_ipv6_sized_dstopt( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short srcport, unsigned short dstport, uint32_t isn, size_t dstopt_size )
 {
     struct ip6_hdr *ip6h;
     struct tcphdr *tcph_optioned;
     struct ether_header *ethh;
     void *next;
     int packet_size;
-    /*
-     * Arbitrarily chosen amount of destination options padding to "overvlow"
-     * the first packet.
-     */
-    unsigned short optlen = fix_up_destination_options_length(
-        MINIMUM_PACKET_SIZE - SIZEOF_IPV6 - SIZEOF_DESTOPT - SIZEOF_FRAG + 512
-    );
+    unsigned short optlen = fix_up_destination_options_length( dstopt_size );
 
     packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + SIZEOF_DESTOPT + optlen + SIZEOF_TCP;
 
@@ -1580,6 +1607,12 @@ int main( int argc, char **argv )
             break;
         case TEST_IPV6_FRAG_NOMORE_TCP:
             do_ipv6_frag_nomore_tcp( interface, srcip, dstip, srcmac, dstmac, srcport, dstport, isn );
+            break;
+        case TEST_IPV6_MANY_FRAG_NOMORE_TCP:
+            do_ipv6_many_frag_nomore_tcp( interface, srcip, dstip, srcmac, dstmac, srcport, dstport, isn );
+            break;
+        case TEST_IPV6_SMALL_DSTOPT_TCP:
+            do_ipv6_small_dstopt( interface, srcip, dstip, srcmac, dstmac, srcport, dstport, isn );
             break;
         case TEST_IPV6_BIG_DSTOPT_TCP:
             do_ipv6_big_dstopt( interface, srcip, dstip, srcmac, dstmac, srcport, dstport, isn );

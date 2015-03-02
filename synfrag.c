@@ -1310,16 +1310,17 @@ void do_ipv6_many_frag_nomore_tcp( char *interface, char *srcip, char *dstip, ch
 #define do_ipv6_many_big_dstopt_tcp( a, b, c, d, e, f, g, h ) do_ipv6_many_sized_dstopt_tcp( a, b, c, d, e, f, g, h, 14, 94 )
 #define do_ipv6_many_small_dstopt_tcp( a, b, c, d, e, f, g, h ) do_ipv6_many_sized_dstopt_tcp( a, b, c, d, e, f, g, h, 14, 6 )
 
-void do_ipv6_many_sized_dstopt_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short srcport, unsigned short dstport, uint32_t isn, size_t count, size_t dstopt_size )
+void do_ipv6_many_sized_dstopt_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short srcport, unsigned short dstport, uint32_t isn, size_t dstopt_headers, size_t dstopt_size )
 {
     struct ip6_hdr *ip6h;
     struct tcphdr *tcph;
     struct ether_header *ethh;
     int packet_size;
     void *next;
-    const int dstopt_headers = 14; /* Must be >= 1. See above. */
     const int optlen = fix_up_destination_options_length( dstopt_size );
     const int my_dstopt_size = SIZEOF_DESTOPT + optlen;
+
+    if (dstopt_headers < 1) errx( 1, "Invalid header count! Programmer error!" );
 
     packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + ( my_dstopt_size * dstopt_headers ) + SIZEOF_TCP;
 

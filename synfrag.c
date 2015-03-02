@@ -107,6 +107,7 @@ enum TEST_TYPE {
     TEST_IPV6_MANY_FRAG_NOMORE_TCP = 23,
     TEST_IPV6_BIG_DSTOPT_TCP = 25,
     TEST_IPV6_SMALL_DSTOPT_TCP = 27,
+    TEST_IPV6_MANY_DSTOPT_TCP = 29,
 
     TEST_IPV6_FRAG_ICMP6 = 12,
     TEST_IPV6_DSTOPT_FRAG_ICMP6 = 14,
@@ -133,6 +134,7 @@ enum TEST_TYPE test_indexes[] = {
     TEST_IPV6_FRAG_FRAG_TCP,
     TEST_IPV6_FRAG_NOMORE_TCP,
     TEST_IPV6_MANY_FRAG_NOMORE_TCP,
+    TEST_IPV6_MANY_DSTOPT_TCP,
     TEST_IPV6_BIG_DSTOPT_TCP,
     TEST_IPV6_SMALL_DSTOPT_TCP,
     TEST_IPV6_DSTOPT_FRAG_ICMP6,
@@ -155,6 +157,7 @@ const char *test_names[] = {
     "v6-frag-frag-tcp",
     "v6-frag-nomore-tcp",
     "v6-many-frag-nomore-tcp",
+    "v6-many-dstopt-tcp",
     "v6-big-dstopt-tcp",
     "v6-small-dstopt-tcp",
     "v6-dstopt-frag-icmp6",
@@ -1202,7 +1205,7 @@ void do_ipv6_many_frag_nomore_tcp( char *interface, char *srcip, char *dstip, ch
     struct ether_header *ethh;
     int packet_size;
     void *next;
-    const int frag_headers = 10; // Must be >= 1!
+    const int frag_headers = 14; // Must be >= 1. FreeBSD seems to stop accepting > 15 headers.
 
     packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + ( SIZEOF_FRAG * frag_headers ) + SIZEOF_TCP;
 
@@ -1216,6 +1219,35 @@ void do_ipv6_many_frag_nomore_tcp( char *interface, char *srcip, char *dstip, ch
         next = append_frag_last( next, IPPROTO_FRAGMENT, 0, rand() );
     }
     next = append_frag_last( next, IPPROTO_TCP, 0, rand() );
+    append_tcp_syn( next, srcport, dstport, isn );
+    calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
+
+    synfrag_send( ethh, packet_size );
+    free( ethh );
+}
+
+void do_ipv6_many_dstopt_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short srcport, unsigned short dstport, uint32_t isn )
+{
+    struct ip6_hdr *ip6h;
+    struct tcphdr *tcph;
+    struct ether_header *ethh;
+    int packet_size;
+    void *next;
+    const int dstopt_headers = 14; // Must be >= 1. See above.
+    const int my_dstopt_size = SIZEOF_DESTOPT + 6;
+
+    packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + ( my_dstopt_size * dstopt_headers ) + SIZEOF_TCP;
+
+    ethh = (struct ether_header *) malloc_check( BIG_PACKET_SIZE );
+    ip6h = (struct ip6_hdr *) ( (char *) ethh + SIZEOF_ETHER );
+    tcph = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + ( my_dstopt_size * dstopt_headers ) );
+
+    next = append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
+    next = append_ipv6( next, srcip, dstip, IPPROTO_DSTOPTS, ( my_dstopt_size * dstopt_headers ) + SIZEOF_TCP );
+    for ( int x = 0; x < dstopt_headers - 1; x++ ) {
+        next = append_dest( next, IPPROTO_DSTOPTS, 6 );
+    }
+    next = append_dest( next, IPPROTO_TCP, 6 );
     append_tcp_syn( next, srcport, dstport, isn );
     calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
 
@@ -1610,6 +1642,9 @@ int main( int argc, char **argv )
             break;
         case TEST_IPV6_MANY_FRAG_NOMORE_TCP:
             do_ipv6_many_frag_nomore_tcp( interface, srcip, dstip, srcmac, dstmac, srcport, dstport, isn );
+            break;
+        case TEST_IPV6_MANY_DSTOPT_TCP:
+            do_ipv6_many_dstopt_tcp( interface, srcip, dstip, srcmac, dstmac, srcport, dstport, isn );
             break;
         case TEST_IPV6_SMALL_DSTOPT_TCP:
             do_ipv6_small_dstopt( interface, srcip, dstip, srcmac, dstmac, srcport, dstport, isn );

@@ -99,6 +99,7 @@ int do_checksum(char *buf, int protocol, int len)
                     ip_hl += sizeof( struct ip6_frag );
                     break;
                 case IPPROTO_DSTOPTS:
+                case IPPROTO_HOPOPTS:
                     next_header = ( (struct ip6_dest *) ( buf + ip_hl ) )->ip6d_nxt;
                     ip_hl += ( ( (struct ip6_dest *) ( buf + ip_hl ) )->ip6d_len * 8 ) + 8;
                     break;

@@ -110,6 +110,7 @@ enum TEST_TYPE {
     TEST_IPV6_MANY_SMALL_DSTOPT_TCP = 29,
     TEST_IPV6_MANY_BIG_DSTOPT_TCP = 31,
     TEST_IPV6_FRAG_DSTOPT2_TCP = 33,
+    TEST_IPV6_FRAGGED_DSTOPT_TCP = 35,
 
     TEST_IPV6_FRAG_ICMP6 = 12,
     TEST_IPV6_DSTOPT_FRAG_ICMP6 = 14,
@@ -141,6 +142,7 @@ enum TEST_TYPE test_indexes[] = {
     TEST_IPV6_MANY_BIG_DSTOPT_TCP,
     TEST_IPV6_BIG_DSTOPT_TCP,
     TEST_IPV6_SMALL_DSTOPT_TCP,
+    TEST_IPV6_FRAGGED_DSTOPT_TCP,
     TEST_IPV6_DSTOPT_FRAG_ICMP6,
 
     0
@@ -166,6 +168,7 @@ const char *test_names[] = {
     "v6-many-big-dstopt-tcp",
     "v6-big-dstopt-tcp",
     "v6-small-dstopt-tcp",
+    "v6-fragged-dstopt-tcp",
     "v6-dstopt-frag-icmp6",
 
     NULL
@@ -487,7 +490,7 @@ char *print_a_packet( char *packet_data, int len, unsigned short wanted_type, in
             return NULL;
         }
         print_iph( iph );
-        // If this packet is a fragment (ie, has an offset) or has more fragments following...
+        /* If this packet is a fragment (ie, has an offset) or has more fragments following... */
         if ( ( ntohs( iph->ip_off ) & 0x1FFF ) || ntohs( iph->ip_off ) & ( 1 << IP_FLAGS_OFFSET ) ) {
             printf( "[ Not parsing data fragment. ]\n" );
             found_type = -1;
@@ -1212,6 +1215,43 @@ void do_ipv6_frag_frag_tcp( char *interface, char *srcip, char *dstip, char *src
     free( ethh );
 }
 
+void do_ipv6_fragged_dstopt_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short srcport, unsigned short dstport, uint32_t isn )
+{
+    struct ip6_hdr *ip6h;
+    struct tcphdr *tcph, *tcph_optioned;
+    struct ether_header *ethh;
+    void *next;
+    int packet_size;
+    unsigned short fragid = rand();
+    const int DSTOPT_OVERFLOW = 8;
+    const unsigned short optlen = fix_up_destination_options_length( 16 ); /* > DSTOPT_OVERFLOW */
+
+    packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + SIZEOF_FRAG + SIZEOF_DESTOPT + optlen - DSTOPT_OVERFLOW;
+
+    ethh = (struct ether_header *) malloc_check( BIG_PACKET_SIZE );
+    ip6h = (struct ip6_hdr *) ( (char *) ethh + SIZEOF_ETHER );
+    tcph = (struct tcphdr *) ( (char *) ip6h + SIZEOF_IPV6 + SIZEOF_FRAG + DSTOPT_OVERFLOW );
+
+    next = append_ethernet( ethh, srcmac, dstmac, ETHERTYPE_IPV6 );
+    next = append_ipv6( next, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + SIZEOF_DESTOPT + optlen - DSTOPT_OVERFLOW );
+    next = append_frag_first( next, IPPROTO_DSTOPTS, fragid );
+    tcph_optioned = append_dest( next, IPPROTO_TCP, optlen );
+    append_tcp_syn( tcph_optioned, srcport, dstport, isn );
+    calc_checksum( ip6h, IPPROTO_TCP, SIZEOF_TCP );
+
+    synfrag_send( ethh, packet_size );
+
+    packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + SIZEOF_FRAG + DSTOPT_OVERFLOW + SIZEOF_TCP;
+
+    next = append_ipv6( ip6h, srcip, dstip, IPPROTO_FRAGMENT, SIZEOF_FRAG + DSTOPT_OVERFLOW + SIZEOF_TCP );
+    next = append_frag_last( next, IPPROTO_DSTOPTS, SIZEOF_DESTOPT + optlen - DSTOPT_OVERFLOW, fragid );
+    memset( next, 0, DSTOPT_OVERFLOW );
+    memmove( tcph, tcph_optioned, SIZEOF_TCP );
+
+    synfrag_send( ethh, packet_size );
+    free( ethh );
+}
+
 void do_ipv6_frag_nomore_tcp( char *interface, char *srcip, char *dstip, char *srcmac, char *dstmac, unsigned short srcport, unsigned short dstport, uint32_t isn )
 {
     struct ip6_hdr *ip6h;
@@ -1244,7 +1284,7 @@ void do_ipv6_many_frag_nomore_tcp( char *interface, char *srcip, char *dstip, ch
     struct ether_header *ethh;
     int packet_size;
     void *next;
-    const int frag_headers = 14; // Must be >= 1. FreeBSD seems to stop accepting > 15 headers.
+    const int frag_headers = 14; /* Must be >= 1. FreeBSD seems to stop accepting > 15 headers. */
 
     packet_size = SIZEOF_ETHER + SIZEOF_IPV6 + ( SIZEOF_FRAG * frag_headers ) + SIZEOF_TCP;
 
@@ -1277,7 +1317,7 @@ void do_ipv6_many_sized_dstopt_tcp( char *interface, char *srcip, char *dstip, c
     struct ether_header *ethh;
     int packet_size;
     void *next;
-    const int dstopt_headers = 14; // Must be >= 1. See above.
+    const int dstopt_headers = 14; /* Must be >= 1. See above. */
     const int optlen = fix_up_destination_options_length( dstopt_size );
     const int my_dstopt_size = SIZEOF_DESTOPT + optlen;
 
@@ -1675,6 +1715,9 @@ int main( int argc, char **argv )
             break;
         case TEST_IPV6_BIG_DSTOPT_TCP:
             do_ipv6_big_dstopt_tcp( interface, srcip, dstip, srcmac, dstmac, srcport, dstport, isn );
+            break;
+        case TEST_IPV6_FRAGGED_DSTOPT_TCP:
+            do_ipv6_fragged_dstopt_tcp( interface, srcip, dstip, srcmac, dstmac, srcport, dstport, isn );
             break;
         case TEST_IPV6_DSTOPT_FRAG_ICMP6:
             do_ipv6_dstopt_frag_icmp( interface, srcip, dstip, srcmac, dstmac );

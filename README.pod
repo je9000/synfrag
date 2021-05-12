@@ -40,7 +40,9 @@ as expected.
 
 synfrag is currently under development and is missing some useful features.
 Namely, synfrag does not resolve hostnames nor discover the next-hop layer
-2 address, and requires the user to specify these parameters.
+2 address, and requires the user to specify these parameters. The included
+Perl script "sf" can be used as a wrapper to run synfrag with the correct
+arguments.
 
 Additionally, synfrag does not attempt to prevent the host operating system
 from interpreting any replies received from scanned hosts, meaning that after
@@ -187,7 +189,7 @@ https://github.com/yahoo/synfrag/
 The current development branch is availble from the author's github tree,
 located at:
 
-https://github.com/jeagle/synfrag/
+https://github.com/je9000/synfrag/
 
 =head1 Changes
 
